@@ -1,0 +1,93 @@
+# =============================================================================
+# Mood definitions — the single source of truth for each mood's LED look.
+#
+# Edit this file, then regenerate the C header:
+#     pip install pyyaml            # once
+#     python3 Utils/generate_moods.py
+# That (re)writes Firmware/include/moods.h — DO NOT edit that header by hand.
+#
+# Fields per mood:
+#   id      : C enum name. Keep MOOD_1..MOOD_N to stay compatible with existing code.
+#   name    : human label (becomes a comment in the generated header).
+#   colours : 1 to MAX_MOOD_COLOURS entries of [R, G, B], each 0-255.
+#   pattern : solid | blink | breath | alternate | fade
+#   period  : animation length in milliseconds. Meaning depends on the pattern:
+#               solid     -> ignored (use 0)
+#               blink     -> full on+off cycle (LED is on for the first half)
+#               breath    -> full dim -> bright -> dim cycle
+#               alternate -> dwell time on each colour before hard-switching
+#               fade      -> time to cross-fade between consecutive colours
+# =============================================================================
+
+moods:
+  - id: IDLE
+    name: Default
+    colours: [[255, 200, 160]]                 # soft warm white — calm idle glow
+    pattern: breath
+    period: 6000                                # slow, gentle "alive" breathing
+
+  - id: BLE_PROVISIONING
+    name: BLE Provisioning
+    colours: [[0, 255, 255]]                    # cyan — Bluetooth colour
+    pattern: blink
+    period: 1000                                # slow, deliberate
+
+  - id: MOOD_1
+    name: Sad
+    colours: [[0, 0, 160]]                      # deep blue — classic melancholy
+    pattern: breath
+    period: 5000                                # slow and heavy
+
+  - id: MOOD_2
+    name: Crying
+    colours: [[0, 40, 180], [0, 140, 200]]      # blue -> cyan, like welling tears
+    pattern: fade
+    period: 2200
+
+  - id: MOOD_3
+    name: Working
+    colours: [[255, 255, 255]]                  # bright white — focus and clarity
+    pattern: solid
+    period: 0
+
+  - id: MOOD_4
+    name: Happy
+    colours: [[255, 205, 0]]                    # bright sunny yellow
+    pattern: solid
+    period: 0
+
+  - id: MOOD_5
+    name: Leepy
+    colours: [[50, 0, 110]]                     # dim indigo — drowsy, night-time
+    pattern: breath
+    period: 7000                                # very slow, like sleeping breaths
+
+  - id: MOOD_6
+    name: Love
+    colours: [[255, 30, 80]]                    # warm pink-red
+    pattern: breath
+    period: 1300                                # heartbeat-paced pulse
+
+  - id: MOOD_7
+    name: Cheeck Cheeck
+    colours: [[255, 110, 140], [255, 170, 190]] # blushing pinks
+    pattern: alternate
+    period: 600                                 # playful little flicker
+
+  - id: MOOD_8
+    name: Heepy
+    colours: [[0, 210, 120], [120, 230, 0]]     # green <-> lime, bouncy energy
+    pattern: alternate
+    period: 500
+
+  - id: MOOD_9
+    name: Angry
+    colours: [[255, 0, 0]]                      # hot red
+    pattern: blink
+    period: 350                                 # fast, agitated flashing
+
+  - id: MOOD_10
+    name: Hungry
+    colours: [[255, 110, 0]]                    # warm orange — food / appetite
+    pattern: breath
+    period: 2200                                # a slow "rumbling" pulse

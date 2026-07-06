@@ -16,7 +16,6 @@
 /* HEADERS                                                                                        */
 /*------------------------------------------------------------------------------------------------*/
 
-#include <Arduino.h>
 #include "hal/led.h"
 #include "hal/button.h"
 #include "moods.h"
@@ -122,7 +121,7 @@ void vCommsTask(void *pvParameters) {
 void lamp_application_init(LampState &lamp_state) {
     setup_button();
     lamp_state.current_mood = MOOD_1;
-    lamp_state.application_state = PROVISIONING;
+    lamp_state.application_state = SHOW_MOOD; // Show default mood pattern on startup
     lamp_state.button_state = BUTTON_RELEASED;
     lamp_state.button_press_time = 0;
     lamp_state.current_time = millis();

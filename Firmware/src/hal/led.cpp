@@ -17,18 +17,20 @@
 /*------------------------------------------------------------------------------------------------*/
 
 #include "hal/led.h"
+#include "hal/led_effects.h"
+#include <Adafruit_NeoPixel.h>
 
 /*------------------------------------------------------------------------------------------------*/
 /* MACROS                                                                                         */
 /*------------------------------------------------------------------------------------------------*/
 
-
+#define LED_DIN_PIN 2
 
 /*------------------------------------------------------------------------------------------------*/
 /* GLOBAL VARIABLES                                                                               */
 /*------------------------------------------------------------------------------------------------*/
 
-
+static Adafruit_NeoPixel led(1, LED_DIN_PIN, NEO_GRB + NEO_KHZ800);
 
 /*------------------------------------------------------------------------------------------------*/
 /* FUNCTION PROTOTYPES                                                                            */
@@ -40,6 +42,23 @@
 /* FUNCTION DEFINITIONS                                                                           */
 /*------------------------------------------------------------------------------------------------*/
 
+void led_init() {
+    led.begin();
+    led.clear();
+    led.show();
+    return;
+}
+
+void led_write(uint8_t red, uint8_t green, uint8_t blue) {
+    led.setPixelColor(0, led.Color(red, green, blue));
+    led.show();
+    return;
+}
+
 void led_render(Moods mood) {
+    const MoodDefinition *mood_def = get_mood_definition(mood);
+    uint8_t red, green, blue;
+    mood_frame(*mood_def, millis(), red, green, blue);
+    led_write(red, green, blue);
     return;
 }

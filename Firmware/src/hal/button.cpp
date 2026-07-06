@@ -48,8 +48,24 @@ void setup_button() {
 }
 
 void get_button_state(ButtonState *state) {
-    int button_value = digitalRead(BUTTON_PIN);
-    *state = (button_value == LOW) ? BUTTON_PRESSED : BUTTON_RELEASED;
+    const uint32_t debounce_delay = 50;
+
+    static ButtonState stable_state = BUTTON_RELEASED;
+    static int last_raw_button_value = HIGH;
+    static uint32_t last_debounce_time = 0;
+
+    int raw_button_value = digitalRead(BUTTON_PIN);
+
+    if (raw_button_value != last_raw_button_value) {
+        last_raw_button_value = raw_button_value;
+        last_debounce_time = millis();
+    }
+
+    if ((millis( ) - last_debounce_time) > debounce_delay) {
+        stable_state = (raw_button_value== LOW) ? BUTTON_PRESSED : BUTTON_RELEASED;
+    }
+
+    *state = stable_state;
     return;
 }
 
@@ -79,13 +95,16 @@ void select_mood_button_handle(LampState &s) {
     if (s.button_state == BUTTON_PRESSED) {
         if (s.button_press_time == 0) {
             s.button_press_time = s.current_time;
-            s.current_mood = static_cast<Moods>((s.current_mood + 1) % 10);
         }
         else if ((s.current_time - s.button_press_time) >= MOOD_SET_TIMER * 1000) {
             s.application_state = SHOW_MOOD;
+            s.button_press_time = 0;
         }
     }
     else {
+        if (s.button_press_time != 0) {
+            s.current_mood = static_cast<Moods>((s.current_mood + 1) % MOOD_COUNT);
+        }
         s.button_press_time = 0;
     }
     return;
