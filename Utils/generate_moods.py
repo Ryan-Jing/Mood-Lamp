@@ -92,7 +92,9 @@ def main():
     L += ["", "#ifndef MOODS_H", "#define MOODS_H", ""]
 
     L += section("HEADERS")
-    L += ["", "#include <Arduino.h>", ""]
+    # <stdint.h> (not <Arduino.h>) so this header also compiles in host/native
+    # unit tests. It only needs the fixed-width integer types.
+    L += ["", "#include <stdint.h>", ""]
 
     L += section("GLOBAL VARIABLES")
     L += ["",

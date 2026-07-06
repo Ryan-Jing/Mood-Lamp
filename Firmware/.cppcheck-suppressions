@@ -1,0 +1,16 @@
+# cppcheck suppressions for the Mood Lamp firmware.
+# One id per line. Used by CI and the pre-push hook via --suppressions-list.
+
+# Arduino / ESP-IDF / library headers aren't on cppcheck's include path — that's
+# expected, we only analyse our own sources.
+missingIncludeSystem
+missingInclude
+
+# unusedFunction is cross-translation-unit and false-positives on HAL entry points
+# that are only called from other .cpp files (or the Arduino framework).
+unusedFunction
+
+# Silence cppcheck's own "consider --check-level=exhaustive" nag and unmatched
+# suppression noise so the report stays clean.
+checkersReport
+unmatchedSuppression

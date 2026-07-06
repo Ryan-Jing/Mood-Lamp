@@ -1,0 +1,161 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Compile the real firmware for the ESP32-C3. Catches build breakage.
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build firmware
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Cache PlatformIO + pip
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-${{ runner.os }}-${{ hashFiles('Firmware/platformio.ini') }}
+      - name: Install PlatformIO + PyYAML
+        run: pip install --upgrade platformio pyyaml
+      - name: Generate mood table (moods.yaml -> moods.h)
+        run: python Utils/generate_moods.py
+      - name: Build
+        working-directory: Firmware
+        run: pio run -e seeed_xiao_esp32c3
+      - name: Upload firmware binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-bin
+          path: Firmware/.pio/build/seeed_xiao_esp32c3/*.bin
+
+  # ---------------------------------------------------------------------------
+  # Run the hardware-independent logic (mood_frame, mood table) on the host.
+  # Fast, no emulation.
+  # ---------------------------------------------------------------------------
+  native-test:
+    name: Native unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Cache PlatformIO + pip
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-${{ runner.os }}-${{ hashFiles('Firmware/platformio.ini') }}
+      - name: Install PlatformIO + PyYAML
+        run: pip install --upgrade platformio pyyaml
+      - name: Generate mood table
+        run: python Utils/generate_moods.py
+      - name: Run native tests
+        working-directory: Firmware
+        run: pio test -e native
+
+  # ---------------------------------------------------------------------------
+  # Static analysis. Fails the build on any warning/style/perf/portability finding.
+  # ---------------------------------------------------------------------------
+  cppcheck:
+    name: Static analysis (cppcheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PyYAML + cppcheck
+        run: |
+          pip install pyyaml
+          sudo apt-get update && sudo apt-get install -y cppcheck
+      - name: Generate mood table (so moods.h exists for analysis)
+        run: python Utils/generate_moods.py
+      - name: Run cppcheck
+        working-directory: Firmware
+        run: |
+          cppcheck --enable=warning,style,performance,portability \
+            --std=c++17 --language=c++ --error-exitcode=1 --inline-suppr \
+            -I include \
+            --suppressions-list=.cppcheck-suppressions \
+            src
+
+  # ---------------------------------------------------------------------------
+  # QEMU boot smoke test on the emulated ESP32-C3 (RISC-V). Confirms the built
+  # image boots far enough to reach setup() and print its UART0 banner.
+  #
+  # EXPERIMENTAL: QEMU's esp32c3 machine + the Arduino core is not guaranteed to
+  # boot cleanly, and the Espressif QEMU asset layout changes over time. This job
+  # is non-blocking (continue-on-error) until it's proven on real CI runs; flip it
+  # to a hard gate by removing continue-on-error once it's green. See Docs/ci-cd.md.
+  # ---------------------------------------------------------------------------
+  qemu-smoke:
+    name: QEMU boot smoke test (ESP32-C3)
+    needs: build
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Cache PlatformIO + pip
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-${{ runner.os }}-${{ hashFiles('Firmware/platformio.ini') }}
+      - name: Install PlatformIO + PyYAML + esptool
+        run: pip install --upgrade platformio pyyaml esptool
+      - name: Generate mood table
+        run: python Utils/generate_moods.py
+      - name: Build firmware
+        working-directory: Firmware
+        run: pio run -e seeed_xiao_esp32c3
+      - name: Merge into a single 4 MB flash image
+        working-directory: Firmware/.pio/build/seeed_xiao_esp32c3
+        run: |
+          BOOT_APP0=$(find ~/.platformio -name boot_app0.bin | head -n1)
+          echo "boot_app0: $BOOT_APP0"
+          esptool.py --chip esp32c3 merge_bin --fill-flash-size 4MB -o flash_image.bin \
+            0x0     bootloader.bin \
+            0x8000  partitions.bin \
+            0xe000  "$BOOT_APP0" \
+            0x10000 firmware.bin
+      - name: Install Espressif QEMU (RISC-V)
+        run: |
+          # Grab the latest riscv32 QEMU build from Espressif's fork.
+          URL=$(curl -sL https://api.github.com/repos/espressif/qemu/releases/latest \
+                | grep -o 'https://[^"]*qemu-riscv32-softmmu[^"]*x86_64-linux-gnu.tar.xz' \
+                | head -n1)
+          echo "Downloading $URL"
+          wget -q "$URL" -O qemu-riscv32.tar.xz
+          sudo tar -xf qemu-riscv32.tar.xz -C /opt
+          echo "/opt/qemu/bin" >> "$GITHUB_PATH"
+      - name: Boot in QEMU and check for the banner
+        working-directory: Firmware/.pio/build/seeed_xiao_esp32c3
+        run: |
+          set -o pipefail
+          # Firmware runs forever, so cap QEMU at 30s then inspect the serial log.
+          timeout 30 qemu-system-riscv32 -nographic -no-reboot -machine esp32c3 \
+            -drive file=flash_image.bin,if=mtd,format=raw -serial mon:stdio \
+            2>&1 | tee qemu.log || true
+          echo "----- serial log tail -----"; tail -n 20 qemu.log
+          echo "----- checking for boot marker -----"
+          grep -q "\[boot\] mood-lamp firmware up" qemu.log

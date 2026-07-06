@@ -1,0 +1,133 @@
+/* =============================================================================
+   Mood Lamp Firmware — minimalist black & white Doxygen theme.
+   Loaded via HTML_EXTRA_STYLESHEET, applied on top of Doxygen's default CSS.
+   Doxygen 1.9+ drives most colours through CSS custom properties, so overriding
+   those (below) recolours the bulk of the UI; the concrete rules after that
+   flatten the few gradient/image bits that aren't variable-driven.
+   ============================================================================= */
+
+html {
+    /* Grayscale palette — a single near-black accent, light-gray fills */
+    --primary-color:            #1a1a1a;
+    --primary-dark-color:       #000000;
+    --primary-light-color:      #444444;
+    --primary-lighter-color:    #e8e8e8;
+    --primary-lightest-color:   #f5f5f5;
+
+    --page-background-color:            #ffffff;
+    --page-foreground-color:            #1a1a1a;
+    --page-secondary-foreground-color:  #595959;
+    --separator-color:                  #e4e4e4;
+
+    --side-nav-background:      #fafafa;
+    --code-background:          #f5f5f5;
+    --fragment-background:      #f5f5f5;
+    --fragment-foreground:      #1a1a1a;
+
+    /* Minimalist: no rounded corners */
+    --border-radius-large:  0px;
+    --border-radius-medium: 0px;
+    --border-radius-small:  0px;
+
+    --content-maxwidth: 920px;
+
+    --font-family:            -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-family-monospace:  "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+}
+
+/* ---- Base typography ------------------------------------------------------ */
+body, table, div, p, dl {
+    font-family: var(--font-family);
+    color: #1a1a1a;
+    font-size: 15px;
+    line-height: 1.6;
+}
+body { background: #ffffff; }
+.contents { max-width: 920px; }
+
+a        { color: #000; text-decoration: none; }
+a:hover  { text-decoration: underline; }
+
+h1, h2, h3, h4 { color: #000; font-weight: 600; letter-spacing: -0.01em; }
+h1.groupheader, h2.groupheader {
+    border-bottom: 1px solid #e4e4e4;
+    padding-bottom: 5px;
+    color: #000;
+    font-weight: 600;
+}
+
+/* ---- Title area ----------------------------------------------------------- */
+#titlearea { background: #fff; border-bottom: 1px solid #1a1a1a; }
+#projectname  { font-weight: 600; letter-spacing: -0.02em; }
+#projectbrief { color: #666; }
+
+/* ---- Flatten the blue tab / menu bars ------------------------------------ */
+.tabs, .tabs2, .tabs3, .tablist { background-image: none; background-color: #1a1a1a; }
+.tablist li, .tablist li.current { background-image: none; }
+.tablist a           { background-image: none; color: #eaeaea; text-shadow: none; }
+.tablist a:hover     { background-image: none; color: #fff; text-decoration: none; }
+.tablist li.current a { background-image: none; color: #fff; font-weight: 600; }
+
+#main-menu, .sm-dox { background: #1a1a1a; }
+.sm-dox a, .sm-dox a:focus, .sm-dox a:active {
+    background: #1a1a1a; background-image: none; color: #eaeaea; text-shadow: none;
+}
+.sm-dox a:hover { background: #000; background-image: none; color: #fff; }
+
+#MSearchBox { border: 1px solid #ccc; border-radius: 0; box-shadow: none; }
+
+/* ---- Content header ------------------------------------------------------- */
+.header { background-image: none; background-color: #fff; border-bottom: 1px solid #e4e4e4; }
+.headertitle .title { color: #000; font-weight: 600; }
+
+/* ---- Member declarations / prototypes (blue -> grayscale) ----------------- */
+.memtitle {
+    background-image: none; background-color: #f0f0f0;
+    border: 1px solid #e4e4e4; border-bottom: none;
+    color: #000; border-radius: 0;
+}
+.memproto, .memname {
+    background-image: none; background-color: #f5f5f5;
+    color: #000; box-shadow: none; border-radius: 0;
+}
+.memitem { box-shadow: none; }
+.memdoc {
+    background-image: none; background-color: #fff;
+    border: 1px solid #e4e4e4; border-top: none;
+    box-shadow: none; border-radius: 0;
+}
+.paramname { color: #000; font-weight: 600; }
+dl.section dt { color: #000; }
+
+/* ---- Code / fragments ----------------------------------------------------- */
+div.fragment, pre.fragment {
+    background-color: #f5f5f5; border: 1px solid #e4e4e4;
+    border-radius: 0; padding: 10px 12px;
+}
+.fragment, div.line, .code { font-family: var(--font-family-monospace); font-size: 13px; }
+code, tt {
+    font-family: var(--font-family-monospace);
+    background: #f0f0f0; padding: 1px 4px; border-radius: 0;
+}
+
+/* ---- Tables --------------------------------------------------------------- */
+table.doxtable td, table.doxtable th { border: 1px solid #e4e4e4; }
+table.doxtable th { background-color: #1a1a1a; color: #fff; }
+
+/* ---- Sidebar tree --------------------------------------------------------- */
+#nav-tree {
+    background-image: none; background-color: #fafafa;
+    border-right: 1px solid #e4e4e4;
+}
+#nav-tree .label      { font-size: 14px; }
+#nav-tree .label a    { color: #1a1a1a; }
+#nav-tree .selected   { background-image: none; background-color: #1a1a1a; text-shadow: none; }
+#nav-tree .selected a { color: #fff; }
+#nav-tree a:hover     { text-decoration: underline; }
+.ui-resizable-e       { background: #e4e4e4; }
+
+/* ---- Breadcrumb / footer -------------------------------------------------- */
+.navpath ul { background-image: none; background-color: #fafafa; border-top: 1px solid #e4e4e4; }
+.navpath li.navelem a { color: #333; text-shadow: none; background-image: none; }
+.navpath li.footer, address.footer, .footer { color: #999; font-size: 12px; }
+hr, .memSeparator { border: none; border-top: 1px solid #e4e4e4; }

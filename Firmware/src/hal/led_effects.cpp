@@ -20,6 +20,12 @@
 
 #include <math.h>
 
+// Use the portable M_PI from <math.h> (some toolchains omit it under strict ISO)
+// rather than Arduino's PI, so this file also compiles in host/native unit tests.
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 /*------------------------------------------------------------------------------------------------*/
 /* MACROS                                                                                         */
 /*------------------------------------------------------------------------------------------------*/
@@ -82,7 +88,7 @@ void mood_frame(const MoodDefinition &mood, uint32_t time_ms, uint8_t &red, uint
         }
         case PATTERN_BREATH: {
             float phase = mood.period ? (float)(time_ms % mood.period) / mood.period : 0;
-            float k = (1.0f - cosf(2.0f * PI * phase)) * 0.5f;
+            float k = (1.0f - cosf(2.0f * (float)M_PI * phase)) * 0.5f;
             red = scale8(C[0][0], k); green = scale8(C[0][1], k); blue = scale8(C[0][2], k);
             break;
         }

@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# -----------------------------------------------------------------------------
+# Pre-push hook: run cppcheck static analysis on the firmware before allowing a
+# push. Blocks the push if cppcheck reports any warning/style/perf/portability
+# finding (same settings as CI, so local == CI).
+#
+# Enable once per clone:
+#     chmod +x .githooks/pre-push
+#     git config core.hooksPath .githooks
+#
+# Requires: cppcheck on PATH  (brew install cppcheck / apt-get install cppcheck)
+# -----------------------------------------------------------------------------
+set -e
+
+if ! command -v cppcheck >/dev/null 2>&1; then
+    echo "pre-push: cppcheck not found — install it (brew install cppcheck) or skip with 'git push --no-verify'"
+    exit 1
+fi
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT/Firmware"
+
+echo "[pre-push] running cppcheck..."
+cppcheck --enable=warning,style,performance,portability \
+    --std=c++17 --language=c++ --error-exitcode=1 --inline-suppr \
+    -I include \
+    --suppressions-list=.cppcheck-suppressions \
+    src
+
+echo "[pre-push] cppcheck passed."
