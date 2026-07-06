@@ -1,15 +1,15 @@
 # Mood Lamp — Firmware CI/CD
 
-Automated build, test, static analysis, and emulation for the Mood Lamp firmware,
-driven by GitHub Actions, plus locally-run Doxygen docs and a pre-push hook.
+Automated build, test, and static analysis for the Mood Lamp firmware, driven by
+GitHub Actions, plus locally-run Doxygen docs and a pre-push hook.
 
 > **Why this replaces the old OtO report.** The prior write-up targeted **ESP-IDF**
 > on **ESP32/ESP32-S3 (xtensa)** and leaned on Docker + `idf.py` + `qemu-system-xtensa`.
 > This project is **PlatformIO + Arduino** on the **XIAO ESP32-C3 (RISC-V)**. That
 > changes almost everything: no Docker/IDF layer (PlatformIO CI is just `pip install
-> platformio && pio run`), QEMU is `qemu-system-riscv32 -machine esp32c3` (not xtensa),
-> cppcheck must run as C++ (not `--std=c99`), and unit tests run natively on the host
-> instead of on-target. The sections below are the corrected, project-specific setup.
+> platformio && pio run`), cppcheck must run as C++ (not `--std=c99`), and unit tests run
+> natively on the host instead of on-target. The sections below are the corrected,
+> project-specific setup.
 
 ---
 
@@ -20,15 +20,18 @@ driven by GitHub Actions, plus locally-run Doxygen docs and a pre-push hook.
 | Compile firmware | CI + pre-push (build only in CI) | PlatformIO (`pio run`) | Yes |
 | Unit tests (logic) | CI | PlatformIO `native` env + Unity, host-compiled | Yes |
 | Static analysis | CI + **pre-push** | cppcheck (C++17) | Yes |
-| Boot smoke test | CI | QEMU `qemu-system-riscv32 -machine esp32c3` | No (experimental) |
 | API docs | local (`doxygen Doxyfile`) | Doxygen | n/a |
+
+> On-target emulation (QEMU `esp32c3`) was evaluated and dropped: the Arduino core panics
+> at flash init under QEMU (`assert failed: do_core_init … flash_ret == ESP_OK`), a known
+> emulator limitation, not a firmware bug. Not worth chasing for a boot smoke test — the
+> native tests cover the logic, and real hardware covers the boot.
 
 Two design decisions carry the whole thing:
 
 1. **Test logic on the host, not the chip.** `mood_frame`, the mood table, and (later)
    the button FSM are pure functions of their inputs. Compiling them with the CI runner's
    own gcc (`pio test -e native`) runs them in seconds with real coverage — no emulator.
-   QEMU is reserved for a *boot* smoke test, which is the one thing native tests can't do.
 2. **Keep hardware-independent code hardware-independent.** `moods.h` includes `<stdint.h>`
    (not `<Arduino.h>`) and `led_effects.cpp` uses `M_PI` (not Arduino's `PI`), so both
    compile on the host. Anything touching `digitalRead`/NeoPixel stays out of the native build.
@@ -39,7 +42,7 @@ Two design decisions carry the whole thing:
 
 ### `.github/workflows/ci.yml` — on push & PR to `main`
 
-Four jobs, run in parallel except QEMU (which needs the build):
+Three jobs, run in parallel:
 
 - **build** — installs PlatformIO, regenerates `moods.h` from `moods.yaml`, runs
   `pio run -e seeed_xiao_esp32c3`, uploads the `.bin`s as an artifact.
@@ -47,41 +50,11 @@ Four jobs, run in parallel except QEMU (which needs the build):
   (`build_src_filter` in `platformio.ini`) and runs the Unity suite in `Firmware/test/`.
 - **cppcheck** — installs cppcheck, runs it as C++17 over `Firmware/src` with
   `--error-exitcode=1`, so any finding fails the job.
-- **qemu-smoke** *(experimental, non-blocking)* — merges the build into a 4 MB flash
-  image with `esptool merge_bin`, downloads Espressif's RISC-V QEMU, boots the image
-  for 30 s, and greps the UART0 serial log for the firmware's boot banner.
 
 Each job regenerates `moods.h` first, so a stale committed header can never hide a
 `moods.yaml` change.
 
 Documentation is **not** in CI — it's generated on demand locally (see below).
-
----
-
-## The QEMU boot smoke test (ESP32-C3 / RISC-V)
-
-Because the C3 is RISC-V, the emulator is `qemu-system-riscv32 -machine esp32c3` from
-**Espressif's QEMU fork** — the mainline QEMU esp32 machine (xtensa) in the old report
-does not apply. The flow:
-
-1. `pio run` produces `bootloader.bin`, `partitions.bin`, `firmware.bin`.
-2. `esptool.py --chip esp32c3 merge_bin` assembles them (plus `boot_app0.bin`) into one
-   `flash_image.bin` at the C3 offsets (bootloader at **0x0**, not 0x1000 like the original ESP32).
-3. QEMU boots the image; the firmware prints `[boot] mood-lamp firmware up` to **UART0**
-   (via `Serial0`, which QEMU emulates — the XIAO's USB-CDC `Serial` is separate).
-4. The job greps the serial log for that banner. Present → the app reached `setup()`.
-
-**Status: experimental / non-blocking.** QEMU's esp32c3 machine plus the Arduino core is
-not guaranteed to boot cleanly, and Espressif's QEMU release asset names drift over time
-(the workflow resolves the latest RISC-V build via the GitHub API to reduce breakage). The
-job is `continue-on-error: true` so it can't block merges while being proven. Once it's
-reliably green in Actions, remove `continue-on-error` to make it a hard gate.
-
-**Test it locally** (no push needed): `./Utils/qemu/run.sh` builds the firmware and boots it
-in the same Espressif QEMU inside Docker. Note `brew install qemu` won't work — upstream QEMU
-lacks the `esp32c3` machine; only Espressif's fork has it. QEMU is also dynamically linked
-against `libsdl2-2.0-0`, `libglib2.0-0`, `libpixman-1-0`, `libslirp0`, `libnuma1` (even under
-`-nographic`), so those must be installed in CI and the local Docker image.
 
 ---
 
@@ -149,7 +122,6 @@ cppcheck --enable=warning,style,performance,portability --std=c++17 \
 
 ## Open items / next steps
 
-- [ ] Prove the QEMU job on real CI, then make it a hard gate (drop `continue-on-error`).
 - [ ] Add native tests for the button FSM once `show_mood_button_handle` /
       `select_mood_button_handle` are split from the `digitalRead` HAL.
 - [ ] Add gcov/lcov coverage reporting to the native-test job.

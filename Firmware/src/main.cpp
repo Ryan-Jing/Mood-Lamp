@@ -129,12 +129,6 @@ void lamp_application_init(LampState &lamp_state) {
 }
 
 void setup() {
-    // UART0 boot banner — the CI QEMU smoke test greps for this to confirm the
-    // firmware reaches setup(). (Serial0 = UART0, which QEMU emulates; the XIAO's
-    // USB CDC "Serial" is separate and used for normal debugging.)
-    Serial0.begin(115200);
-    Serial0.println("[boot] mood-lamp firmware up");
-
     BaseType_t xLampReturned;
     BaseType_t xCommsTask;
 
