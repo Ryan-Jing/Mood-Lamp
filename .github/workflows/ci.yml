@@ -138,8 +138,13 @@ jobs:
             0x8000  partitions.bin \
             0xe000  "$BOOT_APP0" \
             0x10000 firmware.bin
-      - name: Install Espressif QEMU (RISC-V)
+      - name: Install Espressif QEMU (RISC-V) + its runtime libs
         run: |
+          # QEMU is dynamically linked against these; without them it fails to load
+          # with "libSDL2-2.0.so.0: cannot open shared object file" even under -nographic.
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libglib2.0-0 libsdl2-2.0-0 libpixman-1-0 libslirp0 libnuma1
           # Grab the latest riscv32 QEMU build from Espressif's fork.
           URL=$(curl -sL https://api.github.com/repos/espressif/qemu/releases/latest \
                 | grep -o 'https://[^"]*qemu-riscv32-softmmu[^"]*x86_64-linux-gnu.tar.xz' \

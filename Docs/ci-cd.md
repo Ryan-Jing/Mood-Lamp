@@ -77,6 +77,12 @@ not guaranteed to boot cleanly, and Espressif's QEMU release asset names drift o
 job is `continue-on-error: true` so it can't block merges while being proven. Once it's
 reliably green in Actions, remove `continue-on-error` to make it a hard gate.
 
+**Test it locally** (no push needed): `./Utils/qemu/run.sh` builds the firmware and boots it
+in the same Espressif QEMU inside Docker. Note `brew install qemu` won't work — upstream QEMU
+lacks the `esp32c3` machine; only Espressif's fork has it. QEMU is also dynamically linked
+against `libsdl2-2.0-0`, `libglib2.0-0`, `libpixman-1-0`, `libslirp0`, `libnuma1` (even under
+`-nographic`), so those must be installed in CI and the local Docker image.
+
 ---
 
 ## Static analysis (cppcheck)
