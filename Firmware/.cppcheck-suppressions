@@ -14,3 +14,8 @@ unusedFunction
 # suppression noise so the report stays clean.
 checkersReport
 unmatchedSuppression
+
+# FreeRTOS task functions must match TaskFunction_t = void(*)(void*). Their
+# pvParameters can't be made const without breaking the callback's function-pointer
+# type, so cppcheck's constParameterCallback suggestion doesn't apply here.
+constParameterCallback
