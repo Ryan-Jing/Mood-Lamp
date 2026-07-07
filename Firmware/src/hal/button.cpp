@@ -2,7 +2,7 @@
 /**
  * @file button.cpp
  * @author  Ryan Jing
- * @brief
+ * @brief Debounced button input and per-state gesture handling implementation.
  *
  * @version 0.1
  * @date 2026-07-03
@@ -18,7 +18,7 @@
 
 #include <Arduino.h>
 #include "hal/button.h"
-#include "app_state.h"
+#include "state.h"
 
 /*------------------------------------------------------------------------------------------------*/
 /* MACROS                                                                                         */
@@ -44,7 +44,6 @@
 
 void setup_button() {
     pinMode(BUTTON_PIN, INPUT);
-    return;
 }
 
 void get_button_state(ButtonState *state) {
@@ -66,7 +65,6 @@ void get_button_state(ButtonState *state) {
     }
 
     *state = stable_state;
-    return;
 }
 
 void show_mood_button_handle(LampState &s) {
@@ -80,7 +78,7 @@ void show_mood_button_handle(LampState &s) {
             uint32_t held = s.current_time - s.button_press_time;
 
             if (held >= BLE_SET_TIMER * 1000) {
-                s.application_state = PROVISIONING;
+                s.application_state = BLE_STATUS;
             }
             else if (held >= MOOD_SET_TIMER * 1000) {
                 s.application_state = SELECT_MOOD;
@@ -88,7 +86,6 @@ void show_mood_button_handle(LampState &s) {
         }
         s.button_press_time = 0;
     }
-    return;
 }
 
 void select_mood_button_handle(LampState &s) {
@@ -107,5 +104,4 @@ void select_mood_button_handle(LampState &s) {
         }
         s.button_press_time = 0;
     }
-    return;
 }

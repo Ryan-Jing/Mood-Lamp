@@ -1,8 +1,8 @@
 /**************************************************************************************************/
 /**
- * @file led.h
+ * @file state.h
  * @author  Ryan Jing
- * @brief WS2812B LED driver and mood animation engine (solid/blink/breath/alternate/fade).
+ * @brief Lamp and comms state types plus the mutex-guarded interface shared by both tasks.
  *
  * @version 0.1
  * @date 2026-07-03
@@ -12,14 +12,16 @@
  */
 /**************************************************************************************************/
 
-#ifndef HAL_LED_H
-#define HAL_LED_H
+#ifndef STATE_H
+#define STATE_H
 
 /*------------------------------------------------------------------------------------------------*/
 // HEADERS                                                                                        */
 /*------------------------------------------------------------------------------------------------*/
 
 #include "moods.h"
+#include "hal/button.h"
+#include "net/wifi.h"
 
 /*------------------------------------------------------------------------------------------------*/
 // GLOBAL VARIABLES                                                                               */
@@ -31,7 +33,41 @@
 // CLASS DECLARATIONS                                                                             */
 /*------------------------------------------------------------------------------------------------*/
 
+enum AppState
+{
+    BLE_STATUS,
+    NET_STATUS,
+    SHOW_MOOD,
+    SELECT_MOOD
+};
 
+typedef struct LampState {
+    Moods current_mood;
+    AppState application_state;
+    ButtonState button_state;
+    uint32_t button_press_time;
+    uint32_t current_time;
+} LampState;
+
+enum CommsStatus
+{
+    BLE_PROVISIONING,
+    BLE_CONNECTED,
+    NET_CONNECTING,
+    NET_CONNECTED,
+    NET_DISCONNECTED
+};
+
+typedef struct NetState {
+    CommsStatus comms_status;
+    Moods peer_mood;
+    Moods mood_to_post;
+    WifiCredentials wifi_credentials;
+    uint32_t peer_version;
+    uint32_t last_peer_poll_ms;
+    uint8_t poll_retry_count;
+    bool has_mood_to_post;
+} NetState;
 
 /*------------------------------------------------------------------------------------------------*/
 // FUNCTION DECLARATIONS                                                                          */
@@ -40,55 +76,88 @@
 /**************************************************************************************************/
 /**
  * @name
- * @brief Initialise the NeoPixel driver and clear the LED.
+ * @brief Create the mutex and queue backing the shared task interface.
  *
  *
  *
  */
 /**************************************************************************************************/
-void led_init();
+void shared_state_init();
 
 /**************************************************************************************************/
 /**
  * @name
- * @brief Write an RGB colour to the LED and latch it.
+ * @brief Publish the current comms status for the lamp task to read.
  *
  *
- * @param red
- * @param green
- * @param blue
+ * @param comms_status
  *
  */
 /**************************************************************************************************/
-void led_write(uint8_t red, uint8_t green, uint8_t blue);
+void shared_set_net_state(CommsStatus comms_status);
 
 /**************************************************************************************************/
 /**
  * @name
- * @brief Render the current animation frame for a mood to the LED.
+ * @brief Return the latest comms status.
+ *
+ *
+ *
+ * @return CommsStatus
+ */
+/**************************************************************************************************/
+CommsStatus shared_get_net_state();
+
+/**************************************************************************************************/
+/**
+ * @name
+ * @brief Publish the peer's latest mood for the lamp task to display.
  *
  *
  * @param mood
  *
  */
 /**************************************************************************************************/
-void led_render(Moods mood);
+void shared_set_peer_mood(Moods mood);
 
 /**************************************************************************************************/
 /**
  * @name
- * @brief Compute a mood's RGB colour at a given time, applying its animation pattern.
+ * @brief Return the peer's latest mood.
+ *
+ *
+ *
+ * @return Moods
+ */
+/**************************************************************************************************/
+Moods shared_get_peer_mood();
+
+/**************************************************************************************************/
+/**
+ * @name
+ * @brief Queue a locally-set mood for the comms task to publish.
  *
  *
  * @param mood
- * @param time_ms
- * @param red
- * @param green
- * @param blue
  *
+ * @return true
+ * @return false
  */
 /**************************************************************************************************/
-void mood_frame(const MoodDefinition &mood, uint32_t time_ms, uint8_t &red, uint8_t &green, uint8_t &blue);
+bool shared_post_mood(Moods mood);
 
+/**************************************************************************************************/
+/**
+ * @name
+ * @brief Dequeue a locally-set mood awaiting upload, if any.
+ *
+ *
+ * @param mood
+ *
+ * @return true
+ * @return false
+ */
+/**************************************************************************************************/
+bool shared_get_posted_mood(Moods *mood);
 
-#endif // HAL_LED_H
+#endif // STATE_H

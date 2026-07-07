@@ -17,13 +17,13 @@
 // HEADERS                                                                                        */
 /*------------------------------------------------------------------------------------------------*/
 
-#include <stdint.h>
+#include <Arduino.h>
 
 /*------------------------------------------------------------------------------------------------*/
 // GLOBAL VARIABLES                                                                               */
 /*------------------------------------------------------------------------------------------------*/
 
-#define MOOD_COUNT          12
+#define MOOD_COUNT          13
 #define MAX_MOOD_COLOURS    4
 
 /*------------------------------------------------------------------------------------------------*/
@@ -32,7 +32,8 @@
 
 enum Moods {
     IDLE,   // Default
-    BLE_PROVISIONING,   // BLE Provisioning
+    BLE,   // BLE Provisioning
+    NO_WIFI,   // No Wi-Fi
     MOOD_1,   // Sad
     MOOD_2,   // Crying
     MOOD_3,   // Working
@@ -62,7 +63,8 @@ typedef struct {
 
 static const MoodDefinition MOOD_TABLE[MOOD_COUNT] = {
     { {{255, 200, 160}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, 1, PATTERN_BREATH, 6000 },   // IDLE Default
-    { {{0, 255, 255}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, 1, PATTERN_BLINK, 1000 },   // BLE_PROVISIONING BLE Provisioning
+    { {{0, 255, 255}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, 1, PATTERN_BLINK, 1000 },   // BLE BLE Provisioning
+    { {{255, 90, 25}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, 1, PATTERN_BLINK, 500 },   // NO_WIFI No Wi-Fi
     { {{0, 0, 160}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, 1, PATTERN_BREATH, 5000 },   // MOOD_1 Sad
     { {{0, 40, 180}, {0, 140, 200}, {0, 0, 0}, {0, 0, 0}}, 2, PATTERN_FADE, 2200 },   // MOOD_2 Crying
     { {{255, 255, 255}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, 1, PATTERN_SOLID, 0 },   // MOOD_3 Working

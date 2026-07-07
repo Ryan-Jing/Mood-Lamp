@@ -26,11 +26,17 @@ moods:
     pattern: breath
     period: 6000                                # slow, gentle "alive" breathing
 
-  - id: BLE_PROVISIONING
+  - id: BLE
     name: BLE Provisioning
     colours: [[0, 255, 255]]                    # cyan — Bluetooth colour
     pattern: blink
     period: 1000                                # slow, deliberate
+
+  - id: NO_WIFI
+    name: No Wi-Fi
+    colours: [[255, 90, 25]]                    # reddish organge — error / attention
+    pattern: blink
+    period: 500                                 # fast, urgent
 
   - id: MOOD_1
     name: Sad

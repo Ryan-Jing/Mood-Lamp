@@ -1,8 +1,8 @@
 /**************************************************************************************************/
 /**
- * @file led_effects.h
+ * @file storage.h
  * @author  Ryan Jing
- * @brief
+ * @brief NVS-backed persistence helpers for device configuration.
  *
  * @version 0.1
  * @date 2026-07-03
@@ -12,14 +12,14 @@
  */
 /**************************************************************************************************/
 
-#ifndef HAL_LED_EFFECTS_H
-#define HAL_LED_EFFECTS_H
+#ifndef STORAGE_STORAGE_H
+#define STORAGE_STORAGE_H
 
 /*------------------------------------------------------------------------------------------------*/
 // HEADERS                                                                                        */
 /*------------------------------------------------------------------------------------------------*/
 
-#include "moods.h"
+
 
 /*------------------------------------------------------------------------------------------------*/
 // GLOBAL VARIABLES                                                                               */
@@ -37,6 +37,6 @@
 // FUNCTION DECLARATIONS                                                                          */
 /*------------------------------------------------------------------------------------------------*/
 
-void mood_frame(const MoodDefinition &mood, uint32_t time_ms, uint8_t &red, uint8_t &green, uint8_t &blue);
 
-#endif // HAL_LED_EFFECTS_H
+
+#endif // STORAGE_STORAGE_H

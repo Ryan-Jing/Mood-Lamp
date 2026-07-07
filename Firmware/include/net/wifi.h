@@ -1,8 +1,8 @@
 /**************************************************************************************************/
 /**
- * @file led.h
+ * @file wifi.h
  * @author  Ryan Jing
- * @brief WS2812B LED driver and mood animation engine (solid/blink/breath/alternate/fade).
+ * @brief Wi-Fi credentials type and NVS-backed credential accessors.
  *
  * @version 0.1
  * @date 2026-07-03
@@ -12,14 +12,14 @@
  */
 /**************************************************************************************************/
 
-#ifndef HAL_LED_H
-#define HAL_LED_H
+#ifndef NET_WIFI_H
+#define NET_WIFI_H
 
 /*------------------------------------------------------------------------------------------------*/
 // HEADERS                                                                                        */
 /*------------------------------------------------------------------------------------------------*/
 
-#include "moods.h"
+
 
 /*------------------------------------------------------------------------------------------------*/
 // GLOBAL VARIABLES                                                                               */
@@ -31,7 +31,10 @@
 // CLASS DECLARATIONS                                                                             */
 /*------------------------------------------------------------------------------------------------*/
 
-
+typedef struct {
+    char ssid[33];      // 32-byte max SSID + null terminator
+    char password[64];  // WPA2 password max is 63 chars + null terminator
+} WifiCredentials;
 
 /*------------------------------------------------------------------------------------------------*/
 // FUNCTION DECLARATIONS                                                                          */
@@ -39,56 +42,78 @@
 
 /**************************************************************************************************/
 /**
- * @name
- * @brief Initialise the NeoPixel driver and clear the LED.
+ * @name get_wifi_credentials
+ * @brief Load stored Wi-Fi credentials from NVS; returns false if none are saved.
  *
+ * @param credentials
  *
- *
+ * @return true
+ * @return false
  */
 /**************************************************************************************************/
-void led_init();
+bool get_wifi_credentials(WifiCredentials &credentials);
 
 /**************************************************************************************************/
 /**
- * @name
- * @brief Write an RGB colour to the LED and latch it.
+ * @name save_wifi_credentials
+ * @brief Save Wi-Fi credentials to NVS.
  *
  *
- * @param red
- * @param green
- * @param blue
+ * @param credentials
  *
  */
 /**************************************************************************************************/
-void led_write(uint8_t red, uint8_t green, uint8_t blue);
+void save_wifi_credentials(const WifiCredentials &credentials);
 
 /**************************************************************************************************/
 /**
- * @name
- * @brief Render the current animation frame for a mood to the LED.
+ * @name clear_wifi_credentials
+ * @brief Clear stored Wi-Fi credentials from NVS.
  *
  *
- * @param mood
  *
  */
 /**************************************************************************************************/
-void led_render(Moods mood);
+void clear_wifi_credentials();
 
 /**************************************************************************************************/
 /**
- * @name
- * @brief Compute a mood's RGB colour at a given time, applying its animation pattern.
+ * @name    wifi_connect
+ * @brief   Attempt to connect to the Wi-Fi network using the provided credentials,
+ *          waiting up to timeout_ms milliseconds for a connection.
  *
  *
- * @param mood
- * @param time_ms
- * @param red
- * @param green
- * @param blue
+ * @param credentials
+ * @param timeout_ms
+ *
+ * @return true
+ * @return false
+ */
+/**************************************************************************************************/
+bool wifi_connect(const WifiCredentials &credentials, uint32_t timeout_ms);
+
+/**************************************************************************************************/
+/**
+ * @name    wifi_disconnect
+ * @brief   Disconnect from the current Wi-Fi network.
+ *
+ *
  *
  */
 /**************************************************************************************************/
-void mood_frame(const MoodDefinition &mood, uint32_t time_ms, uint8_t &red, uint8_t &green, uint8_t &blue);
+void wifi_disconnect();
 
+/**************************************************************************************************/
+/**
+ * @name    wifi_is_connected
+ * @brief   Return true if the device is currently connected to a Wi-Fi network.
+ *
+ *
+ *
+ * @return true
+ * @return false
+ */
+/**************************************************************************************************/
+bool wifi_is_connected();
 
-#endif // HAL_LED_H
+#endif // NET_WIFI_H

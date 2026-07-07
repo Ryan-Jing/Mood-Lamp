@@ -2,7 +2,7 @@
 /**
  * @file button.h
  * @author  Ryan Jing
- * @brief
+ * @brief Debounced push-button input and the mood-select / provisioning gesture handlers.
  *
  * @version 0.1
  * @date 2026-07-03
@@ -38,7 +38,7 @@ enum ButtonState
     BUTTON_RELEASED
 };
 
-// Forward declaration; the full definition lives in app_state.h. The handlers below
+// Forward declaration; the full definition lives in state.h. The handlers below
 // take LampState by reference, so this incomplete type is enough here -- this is what
 // breaks the app_state.h <-> button.h include cycle.
 struct LampState;
@@ -50,7 +50,7 @@ struct LampState;
 /**************************************************************************************************/
 /**
  * @name
- * @brief Set the up button object
+ * @brief Configure the button GPIO as an input.
  *
  *
  *
@@ -61,7 +61,7 @@ void setup_button();
 /**************************************************************************************************/
 /**
  * @name
- * @brief Get the button state object
+ * @brief Read the debounced button state (pressed or released).
  *
  *
  * @param state
@@ -73,7 +73,7 @@ void get_button_state(ButtonState *state);
 /**************************************************************************************************/
 /**
  * @name
- * @brief
+ * @brief Handle the button in SHOW_MOOD: hold to select a mood or enter provisioning.
  *
  *
  * @param s
@@ -85,7 +85,7 @@ void show_mood_button_handle(LampState &s);
 /**************************************************************************************************/
 /**
  * @name
- * @brief
+ * @brief Handle the button in SELECT_MOOD: tap to cycle moods, hold to confirm.
  *
  *
  * @param s

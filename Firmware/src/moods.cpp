@@ -2,7 +2,7 @@
 /**
  * @file moods.cpp
  * @author  Ryan Jing
- * @brief
+ * @brief Reserved for mood helpers; the mood table and lookup are generated into moods.h.
  *
  * @version 0.1
  * @date 2026-07-03

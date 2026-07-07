@@ -2,7 +2,7 @@
 /**
  * @file identity.cpp
  * @author  Ryan Jing
- * @brief
+ * @brief Device identity (ID + secret) implementation.
  *
  * @version 0.1
  * @date 2026-07-03

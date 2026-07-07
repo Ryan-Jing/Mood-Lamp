@@ -1,8 +1,8 @@
 /**************************************************************************************************/
 /**
- * @file led.h
+ * @file ble.h
  * @author  Ryan Jing
- * @brief WS2812B LED driver and mood animation engine (solid/blink/breath/alternate/fade).
+ * @brief BLE provisioning GATT service that receives Wi-Fi credentials from the setup app.
  *
  * @version 0.1
  * @date 2026-07-03
@@ -12,14 +12,14 @@
  */
 /**************************************************************************************************/
 
-#ifndef HAL_LED_H
-#define HAL_LED_H
+#ifndef NET_BLE_H
+#define NET_BLE_H
 
 /*------------------------------------------------------------------------------------------------*/
 // HEADERS                                                                                        */
 /*------------------------------------------------------------------------------------------------*/
 
-#include "moods.h"
+#include "net/wifi.h"
 
 /*------------------------------------------------------------------------------------------------*/
 // GLOBAL VARIABLES                                                                               */
@@ -39,56 +39,64 @@
 
 /**************************************************************************************************/
 /**
- * @name
- * @brief Initialise the NeoPixel driver and clear the LED.
+ * @name    ble_provisioning_start
+ * @brief   Start BLE provisioning: init NimBLE, GATT service, and advertise.
  *
  *
  *
  */
 /**************************************************************************************************/
-void led_init();
+void ble_provisioning_start();
 
 /**************************************************************************************************/
 /**
- * @name
- * @brief Write an RGB colour to the LED and latch it.
+ * @name    ble_provisioning_stop
+ * @brief   Stop BLE provisioning: deinit NimBLE and free memory.
  *
  *
- * @param red
- * @param green
- * @param blue
  *
  */
 /**************************************************************************************************/
-void led_write(uint8_t red, uint8_t green, uint8_t blue);
+void ble_provisioning_stop();
 
 /**************************************************************************************************/
 /**
- * @name
- * @brief Render the current animation frame for a mood to the LED.
+ * @name    ble_is_connected
+ * @brief   Return true if a BLE central is connected to the provisioning service.
  *
  *
- * @param mood
  *
+ * @return true
+ * @return false
  */
 /**************************************************************************************************/
-void led_render(Moods mood);
+bool ble_is_connected();
 
 /**************************************************************************************************/
 /**
- * @name
- * @brief Compute a mood's RGB colour at a given time, applying its animation pattern.
+ * @name    ble_take_credentials
+ * @brief   Return true and copy the Wi-Fi credentials if they have been received from the BLE
+ *          central; otherwise return false.
  *
  *
- * @param mood
- * @param time_ms
- * @param red
- * @param green
- * @param blue
+ * @param out
+ *
+ * @return true
+ * @return false
+ */
+/**************************************************************************************************/
+bool ble_take_credentials(WifiCredentials &out);
+
+/**************************************************************************************************/
+/**
+ * @name    ble_set_status
+ * @brief   Push a status string to the STATUS characteristic for the BLE central to read.
+ *
+ *
+ * @param status
  *
  */
 /**************************************************************************************************/
-void mood_frame(const MoodDefinition &mood, uint32_t time_ms, uint8_t &red, uint8_t &green, uint8_t &blue);
+void ble_set_status(const char *status);
 
-
-#endif // HAL_LED_H
+#endif // NET_BLE_H

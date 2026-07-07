@@ -1,8 +1,8 @@
 /**************************************************************************************************/
 /**
- * @file config_store.cpp
+ * @file storage.cpp
  * @author  Ryan Jing
- * @brief
+ * @brief NVS configuration storage implementation.
  *
  * @version 0.1
  * @date 2026-07-03

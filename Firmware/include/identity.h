@@ -2,7 +2,7 @@
 /**
  * @file identity.h
  * @author  Ryan Jing
- * @brief
+ * @brief Per-device identity: unique device ID and secret for authenticating to the server.
  *
  * @version 0.1
  * @date 2026-07-03
