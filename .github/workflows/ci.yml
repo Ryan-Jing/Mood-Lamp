@@ -83,7 +83,7 @@ jobs:
       - name: Install PyYAML + cppcheck
         run: |
           pip install pyyaml
-          sudo apt-get update && sudo apt-get install -y cppcheck
+          sudo apt-get update -o Acquire::Retries=3 && sudo apt-get install -y cppcheck
       - name: Generate mood table (so moods.h exists for analysis)
         run: python Utils/generate_moods.py
       - name: Run cppcheck
