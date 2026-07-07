@@ -20,7 +20,7 @@
 
 #include <unity.h>
 #include "moods.h"
-#include "hal/led_effects.h"
+#include "hal/led.h"
 
 /*------------------------------------------------------------------------------------------------*/
 /* HELPERS                                                                                        */
