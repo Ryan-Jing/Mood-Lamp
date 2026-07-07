@@ -14,3 +14,8 @@ Server/.venv/
 *.bin
 *.elf
 *.map
+**/.DS_Store
+
+__pycache__/
+*.py[cod]
+*$py.class
