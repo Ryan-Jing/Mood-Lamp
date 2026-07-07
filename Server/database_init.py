@@ -6,7 +6,10 @@ import time
 
 DB_PATH = os.getenv("MOOD_DB", "mood.db")
 PAIR_ID = os.getenv("PAIR_ID", "pair_001")
-DEVICES = [("lamp_a", "Mood Lamp A"), ("lamp_b", "Mood Lamp B")]
+DEVICES = [
+    (os.getenv("DEVICE_A_ID", "lamp_a"), os.getenv("DEVICE_A_NAME", "Mood Lamp A")),
+    (os.getenv("DEVICE_B_ID", "lamp_b"), os.getenv("DEVICE_B_NAME", "Mood Lamp B")),
+]
 
 def token_hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
