@@ -1,19 +1,19 @@
 /**************************************************************************************************/
 /**
- * @file led.h
+ * @file led_effects.h
  * @author  Ryan Jing
- * @brief WS2812B LED driver.
+ * @brief Hardware-independent mood animation engine.
  *
  * @version 0.1
- * @date 2026-07-03
+ * @date 2026-07-07
  *
  * @copyright Copyright (c) 2026
  *
  */
 /**************************************************************************************************/
 
-#ifndef HAL_LED_H
-#define HAL_LED_H
+#ifndef HAL_LED_EFFECTS_H
+#define HAL_LED_EFFECTS_H
 
 /*------------------------------------------------------------------------------------------------*/
 // HEADERS                                                                                        */
@@ -40,38 +40,17 @@
 /**************************************************************************************************/
 /**
  * @name
- * @brief Initialise the NeoPixel driver and clear the LED.
+ * @brief Compute a mood's RGB colour at a given time, applying its animation pattern.
  *
  *
- *
- */
-/**************************************************************************************************/
-void led_init();
-
-/**************************************************************************************************/
-/**
- * @name
- * @brief Write an RGB colour to the LED and latch it.
- *
- *
+ * @param mood
+ * @param time_ms
  * @param red
  * @param green
  * @param blue
  *
  */
 /**************************************************************************************************/
-void led_write(uint8_t red, uint8_t green, uint8_t blue);
+void mood_frame(const MoodDefinition &mood, uint32_t time_ms, uint8_t &red, uint8_t &green, uint8_t &blue);
 
-/**************************************************************************************************/
-/**
- * @name
- * @brief Render the current animation frame for a mood to the LED.
- *
- *
- * @param mood
- *
- */
-/**************************************************************************************************/
-void led_render(Moods mood);
-
-#endif // HAL_LED_H
+#endif // HAL_LED_EFFECTS_H
