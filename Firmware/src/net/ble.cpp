@@ -16,9 +16,12 @@
 /* HEADERS                                                                                        */
 /*------------------------------------------------------------------------------------------------*/
 
+#include "net/ble.h"
+
 #include <Arduino.h>
 #include <NimBLEDevice.h>
-#include "net/ble.h"
+
+#include "config.h"
 
 /*------------------------------------------------------------------------------------------------*/
 /* MACROS                                                                                         */
@@ -37,6 +40,8 @@
 
 static volatile bool    s_ble_connected = false;
 static volatile bool    s_ble_apply     = false;
+static bool             s_ble_started   = false;
+static bool             s_ble_stopping  = false;
 static WifiCredentials  s_wifi_creds     = {};
 static NimBLECharacteristic *s_ble_status = nullptr;
 
@@ -50,7 +55,10 @@ class ServerCB : public NimBLEServerCallbacks {
     }
     void onDisconnect(NimBLEServer *ble_server, NimBLEConnInfo &conn_info, int reason) override {
         s_ble_connected = false;
-        NimBLEDevice::startAdvertising();
+
+        if (!s_ble_stopping) {
+            NimBLEDevice::startAdvertising();
+        }
     }
 };
 
@@ -83,29 +91,46 @@ static WriteCB  s_write_callback;
 /*------------------------------------------------------------------------------------------------*/
 
 void ble_provisioning_start() {
+    if (s_ble_started) {
+        return;
+    }
+
+    s_ble_stopping = false;
+
     NimBLEDevice::init(BLE_NAME);
     NimBLEServer *ble_srv = NimBLEDevice::createServer();
 
-    ble_srv->setCallbacks(&s_server_callback);
+    ble_srv->setCallbacks(&s_server_callback, false);
     NimBLEService *ble_svc = ble_srv->createService(SVC_UUID);
     ble_svc->createCharacteristic(SSID_UUID,  NIMBLE_PROPERTY::WRITE)->setCallbacks(&s_write_callback);
     ble_svc->createCharacteristic(PASS_UUID,  NIMBLE_PROPERTY::WRITE)->setCallbacks(&s_write_callback);
     ble_svc->createCharacteristic(APPLY_UUID, NIMBLE_PROPERTY::WRITE)->setCallbacks(&s_write_callback);
     s_ble_status = ble_svc->createCharacteristic(STATUS_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
     s_ble_status->setValue("provisioning");
-    ble_svc->start();
 
     NimBLEAdvertising *ble_adv = NimBLEDevice::getAdvertising();
     ble_adv->enableScanResponse(true);
     ble_adv->setName(BLE_NAME);
     ble_adv->addServiceUUID(SVC_UUID);
     ble_adv->start();
+    s_ble_started = true;
+
+    #ifdef PRINT_DEBUG
+        Serial.println("BLE provisioning started");
+    #endif
 }
 
 void ble_provisioning_stop() {
+    if (!s_ble_started) {
+        return;
+    }
+
+    s_ble_stopping = true;
     NimBLEDevice::deinit(true);
     s_ble_connected = s_ble_apply = false;
     s_ble_status = nullptr;
+    s_ble_started = false;
+    s_ble_stopping = false;
 }
 
 bool ble_is_connected() {
@@ -127,4 +152,3 @@ void ble_set_status(const char *status) {
         s_ble_status->notify();
     }
 }
-

@@ -30,6 +30,7 @@
 
 static SemaphoreHandle_t mtx;
 static QueueHandle_t     outQ;
+static QueueHandle_t     userCommandQ;
 static CommsStatus       g_net_state = BLE_PROVISIONING;
 static Moods             g_peer_mood  = IDLE;
 
@@ -44,8 +45,9 @@ static Moods             g_peer_mood  = IDLE;
 /*------------------------------------------------------------------------------------------------*/
 
 void shared_state_init() {
-    mtx  = xSemaphoreCreateMutex();
-    outQ = xQueueCreate(4, sizeof(Moods));
+    mtx          = xSemaphoreCreateMutex();
+    outQ         = xQueueCreate(4, sizeof(Moods));
+    userCommandQ = xQueueCreate(1, sizeof(UserCommand));
 }
 
 void shared_set_net_state(CommsStatus comms_status) {
@@ -80,4 +82,22 @@ bool shared_post_mood(Moods mood) {
 
 bool shared_get_posted_mood(Moods *mood) {
     return xQueueReceive(outQ, mood, 0) == pdTRUE;
+}
+
+bool shared_post_user_command(UserCommand command) {
+    if (command == USER_COMMAND_NONE) {
+        return false;
+    }
+
+    xQueueOverwrite(userCommandQ, &command);
+    return true;
+}
+
+bool shared_take_user_command(UserCommand *command) {
+    if (xQueueReceive(userCommandQ, command, 0) == pdTRUE) {
+        return true;
+    }
+
+    *command = USER_COMMAND_NONE;
+    return false;
 }

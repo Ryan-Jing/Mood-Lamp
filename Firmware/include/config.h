@@ -27,6 +27,11 @@
 
 #define PRINT_DEBUG 1
 
+#define API_TIMEOUT_MS 5000
+#define PEER_POLL_INTERVAL_MS 10000
+#define API_RETRY_LIMIT 5
+#define SNTP_TIMEOUT_MS 15000
+
 /*------------------------------------------------------------------------------------------------*/
 // CLASS DECLARATIONS                                                                             */
 /*------------------------------------------------------------------------------------------------*/

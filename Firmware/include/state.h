@@ -42,11 +42,13 @@ enum AppState
 };
 
 typedef struct LampState {
-    Moods current_mood;
+    Moods self_mood;
+    Moods peer_mood;
     AppState application_state;
     ButtonState button_state;
     uint32_t button_press_time;
     uint32_t current_time;
+    bool button_long_press_handled;
 } LampState;
 
 enum CommsStatus
@@ -58,6 +60,14 @@ enum CommsStatus
     NET_DISCONNECTED
 };
 
+enum UserCommand
+{
+    USER_COMMAND_NONE,
+    USER_COMMAND_START_BLE,
+    USER_COMMAND_STOP_BLE,
+    USER_COMMAND_CLEAR_WIFI
+};
+
 typedef struct NetState {
     CommsStatus comms_status;
     Moods peer_mood;
@@ -65,6 +75,7 @@ typedef struct NetState {
     WifiCredentials wifi_credentials;
     uint32_t peer_version;
     uint32_t last_peer_poll_ms;
+    uint8_t wifi_retry_count;
     uint8_t poll_retry_count;
     bool has_mood_to_post;
 } NetState;
@@ -159,5 +170,33 @@ bool shared_post_mood(Moods mood);
  */
 /**************************************************************************************************/
 bool shared_get_posted_mood(Moods *mood);
+
+/**************************************************************************************************/
+/**
+ * @name
+ * @brief Queue a user-requested command for the comms task.
+ *
+ *
+ * @param command
+ *
+ * @return true
+ * @return false
+ */
+/**************************************************************************************************/
+bool shared_post_user_command(UserCommand command);
+
+/**************************************************************************************************/
+/**
+ * @name
+ * @brief Take a queued user command, if one is pending.
+ *
+ *
+ * @param command
+ *
+ * @return true
+ * @return false
+ */
+/**************************************************************************************************/
+bool shared_take_user_command(UserCommand *command);
 
 #endif // STATE_H

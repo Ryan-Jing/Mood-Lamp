@@ -25,12 +25,14 @@
 #include "hal/button.h"
 #include "net/wifi.h"
 #include "net/ble.h"
+#include "net/api.h"
 
 /*------------------------------------------------------------------------------------------------*/
 /* MACROS                                                                                         */
 /*------------------------------------------------------------------------------------------------*/
 
-#define TASK_STACK_SIZE 4096
+#define LAMP_TASK_STACK_SIZE 4096
+#define COMMS_TASK_STACK_SIZE 16384
 
 /*------------------------------------------------------------------------------------------------*/
 /* GLOBAL VARIABLES                                                                               */
@@ -93,9 +95,13 @@ void vCommsTask(void *pvParameters);
 /* FUNCTION DEFINITIONS                                                                           */
 /*------------------------------------------------------------------------------------------------*/
 
-static void set_comms(NetState &set_net_state, CommsStatus set_comms_status) {
+static void set_shared_comms_status(NetState &set_net_state, CommsStatus set_comms_status) {
     set_net_state.comms_status = set_comms_status;
     shared_set_net_state(set_comms_status);
+}
+
+static bool has_saved_wifi_credentials(NetState &net_state) {
+    return get_wifi_credentials(net_state.wifi_credentials);
 }
 
 void vLampTask(void *pvParameters) {
@@ -103,11 +109,22 @@ void vLampTask(void *pvParameters) {
     lamp_application_init(lamp_state);
 
     for (;;) {
+        Moods mood_to_render = lamp_state.peer_mood;
+
         lamp_state.current_time = millis();
         get_button_state(&lamp_state.button_state);
 
+        bool button_consumed = handle_user_button_commands(lamp_state);
+        CommsStatus comms_status = shared_get_net_state();
+
+        if (lamp_state.application_state == SELECT_MOOD && comms_status != NET_CONNECTED) {
+            lamp_state.application_state = SHOW_MOOD;
+            lamp_state.button_press_time = 0;
+            lamp_state.button_long_press_handled = false;
+        }
+
         if (lamp_state.application_state != SELECT_MOOD) {
-            switch (shared_get_net_state()) {
+            switch (comms_status) {
                 case BLE_PROVISIONING:
                     lamp_state.application_state = BLE_STATUS;
                     break;
@@ -117,7 +134,7 @@ void vLampTask(void *pvParameters) {
                     break;
 
                 case NET_DISCONNECTED:
-                    lamp_state.application_state = NET_STATUS;
+                    lamp_state.application_state = SHOW_MOOD;
                     break;
 
                 case NET_CONNECTING:
@@ -136,24 +153,38 @@ void vLampTask(void *pvParameters) {
 
         switch (lamp_state.application_state) {
             case BLE_STATUS:
-                lamp_state.current_mood = BLE;
+                mood_to_render = BLE;
                 break;
 
             case NET_STATUS:
-                lamp_state.current_mood = NO_WIFI;
+                mood_to_render = NO_WIFI;
                 break;
 
             case SHOW_MOOD:
-                show_mood_button_handle(lamp_state);
-                lamp_state.current_mood = shared_get_peer_mood();
+                if (!button_consumed) {
+                    show_mood_button_handle(lamp_state);
+                }
+
+                if (comms_status == NET_CONNECTED) {
+                    lamp_state.peer_mood = shared_get_peer_mood();
+                }
+                else if (comms_status == NET_DISCONNECTED) {
+                    lamp_state.peer_mood = IDLE;
+                }
+
+                mood_to_render = lamp_state.peer_mood;
                 break;
 
             case SELECT_MOOD:
-                select_mood_button_handle(lamp_state);
+                if (!button_consumed) {
+                    select_mood_button_handle(lamp_state);
+                }
+
+                mood_to_render = lamp_state.self_mood;
                 break;
             }
 
-        led_render(lamp_state.current_mood);
+        led_render(mood_to_render);
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
@@ -164,17 +195,61 @@ void vCommsTask(void *pvParameters) {
 
     if (net_state.comms_status == BLE_PROVISIONING) {
         ble_provisioning_start();
-
-        #ifdef PRINT_DEBUG
-            Serial.println("BLE provisioning");
-        #endif
     }
 
     for (;;) {
+        UserCommand user_command;
+        if (shared_take_user_command(&user_command)) {
+            switch (user_command) {
+                case USER_COMMAND_START_BLE:
+                    if (net_state.comms_status != BLE_PROVISIONING &&
+                        net_state.comms_status != BLE_CONNECTED) {
+                        wifi_disconnect();
+                        ble_provisioning_start();
+                        set_shared_comms_status(net_state, BLE_PROVISIONING);
+                    }
+                    break;
+
+                case USER_COMMAND_STOP_BLE:
+                    if (net_state.comms_status == BLE_PROVISIONING ||
+                        net_state.comms_status == BLE_CONNECTED) {
+                        ble_provisioning_stop();
+                    }
+
+                    net_state.wifi_retry_count = 0;
+                    net_state.poll_retry_count = 0;
+
+                    if (has_saved_wifi_credentials(net_state)) {
+                        set_shared_comms_status(net_state, NET_CONNECTING);
+                    }
+                    else {
+                        set_shared_comms_status(net_state, NET_DISCONNECTED);
+                    }
+                    break;
+
+                case USER_COMMAND_CLEAR_WIFI:
+                    if (net_state.comms_status == BLE_PROVISIONING ||
+                        net_state.comms_status == BLE_CONNECTED) {
+                        ble_provisioning_stop();
+                    }
+
+                    clear_wifi_credentials();
+                    wifi_disconnect();
+                    ble_provisioning_start();
+                    net_state.wifi_retry_count = 0;
+                    net_state.poll_retry_count = 0;
+                    set_shared_comms_status(net_state, BLE_PROVISIONING);
+                    break;
+
+                default:
+                    break;
+            }
+        }
+
         switch (net_state.comms_status) {
             case BLE_PROVISIONING:
                 if (ble_is_connected()) {
-                    set_comms(net_state, BLE_CONNECTED);
+                    set_shared_comms_status(net_state, BLE_CONNECTED);
                 }
                 break;
 
@@ -186,7 +261,7 @@ void vCommsTask(void *pvParameters) {
                     vTaskDelay(pdMS_TO_TICKS(300));
                     ble_provisioning_stop();
 
-                    set_comms(net_state, NET_CONNECTING);
+                    set_shared_comms_status(net_state, NET_CONNECTING);
 
                     #ifdef PRINT_DEBUG
                         Serial.println("Wi-Fi credentials saved via BLE");
@@ -197,15 +272,31 @@ void vCommsTask(void *pvParameters) {
                     #endif
 
                 } else if (!ble_is_connected()) {
-                    set_comms(net_state, BLE_PROVISIONING);
+                    set_shared_comms_status(net_state, BLE_PROVISIONING);
                 }
                 break;
 
             case NET_CONNECTING:
-                if (wifi_connect(net_state.wifi_credentials, 20000)) {
-                    set_comms(net_state, NET_CONNECTED);
+                if (wifi_connect(net_state.wifi_credentials, WIFI_CONNECT_TIMEOUT_MS)) {
+                    if (!api_wait_for_time(SNTP_TIMEOUT_MS)) {
+                        wifi_disconnect();
+                        net_state.wifi_retry_count++;
+
+                        if (net_state.wifi_retry_count >= WIFI_MAX_RETRIES_BEFORE_BLE) {
+                            set_shared_comms_status(net_state, NET_DISCONNECTED);
+                        }
+
+                        else {
+                            vTaskDelay(pdMS_TO_TICKS(WIFI_RETRY_DELAY_MS));
+                        }
+
+                        break;
+                    }
+
+                    set_shared_comms_status(net_state, NET_CONNECTED);
                     net_state.last_peer_poll_ms = 0;
                     net_state.poll_retry_count = 0;
+                    net_state.wifi_retry_count = 0;
 
                     #ifdef PRINT_DEBUG
                         Serial.println("Wi-Fi connected");
@@ -214,15 +305,86 @@ void vCommsTask(void *pvParameters) {
 
                 else {
                     wifi_disconnect();
-                    vTaskDelay(pdMS_TO_TICKS(1000));
-                    ble_provisioning_start();
-                    set_comms(net_state, BLE_PROVISIONING);
+                    net_state.wifi_retry_count++;
 
+                    if (net_state.wifi_retry_count >= WIFI_MAX_RETRIES_BEFORE_BLE) {
+                        set_shared_comms_status(net_state, NET_DISCONNECTED);
+                    }
+
+                    else {
+                        vTaskDelay(pdMS_TO_TICKS(WIFI_RETRY_DELAY_MS));
+                    }
                 }
                 break;
 
-            case NET_CONNECTED:
+            case NET_CONNECTED: {
+                if (!wifi_is_connected()) {
+                    wifi_disconnect();
+                    set_shared_comms_status(net_state, NET_CONNECTING);
+                    break;
+                }
+
+                Moods posted_mood;
+
+                if (shared_get_posted_mood(&posted_mood)) {
+                    net_state.mood_to_post = posted_mood;
+                    net_state.has_mood_to_post = true;
+                }
+
+                if (net_state.has_mood_to_post) {
+                    if (api_post_mood(net_state.mood_to_post) == API_OK) {
+                        net_state.has_mood_to_post = false;
+                        net_state.poll_retry_count = 0;
+
+                        #ifdef PRINT_DEBUG
+                            Serial.print("Mood posted successfully: ");
+                            Serial.println(net_state.mood_to_post);
+                        #endif
+                    }
+
+                    else {
+                        net_state.poll_retry_count++;
+                    }
+                }
+
+                uint32_t now = millis();
+
+                if (net_state.last_peer_poll_ms == 0 ||
+                    now - net_state.last_peer_poll_ms >= PEER_POLL_INTERVAL_MS) {
+                    net_state.last_peer_poll_ms = now;
+
+                    Moods peer_mood;
+                    uint32_t new_version = net_state.peer_version;
+
+                    ApiResult result = api_get_peer_mood(net_state.peer_version, peer_mood, new_version);
+
+                    if (result == API_OK) {
+                        net_state.peer_mood = peer_mood;
+                        net_state.peer_version = new_version;
+                        shared_set_peer_mood(peer_mood);
+                        net_state.poll_retry_count = 0;
+
+                        #ifdef PRINT_DEBUG
+                            Serial.print("Showing new peer mood updated: ");
+                            Serial.println(peer_mood);
+                        #endif
+                    }
+
+                    else if (result == API_NOT_MODIFIED) {
+                        net_state.poll_retry_count = 0;
+                    }
+
+                    else {
+                        net_state.poll_retry_count++;
+                    }
+                }
+
+                if (net_state.poll_retry_count >= API_RETRY_LIMIT) {
+                    wifi_disconnect();
+                    set_shared_comms_status(net_state, NET_CONNECTING);
+                }
                 break;
+            }
 
             case NET_DISCONNECTED:
                 break;
@@ -238,11 +400,13 @@ void vCommsTask(void *pvParameters) {
 void lamp_application_init(LampState &lamp_state) {
     setup_button();
     led_init();
-    lamp_state.current_mood = shared_get_peer_mood();
+    lamp_state.self_mood = MOOD_1;
+    lamp_state.peer_mood = shared_get_peer_mood();
     lamp_state.application_state = SHOW_MOOD; // Show default mood pattern on startup
     lamp_state.button_state = BUTTON_RELEASED;
     lamp_state.button_press_time = 0;
     lamp_state.current_time = millis();
+    lamp_state.button_long_press_handled = false;
 }
 
 void net_application_init(NetState &net_state) {
@@ -267,6 +431,7 @@ void net_application_init(NetState &net_state) {
     net_state.mood_to_post = MOOD_1;
     net_state.peer_version = 0;
     net_state.last_peer_poll_ms = 0;
+    net_state.wifi_retry_count = 0;
     net_state.poll_retry_count = 0;
     net_state.has_mood_to_post = false;
 }
@@ -284,14 +449,14 @@ void setup() {
 
     xLampReturned = xTaskCreate(vLampTask,
                                 "Lamp Task",
-                                TASK_STACK_SIZE,
+                                LAMP_TASK_STACK_SIZE,
                                 nullptr,
                                 1,
                                 nullptr);
 
     xCommsTask = xTaskCreate(vCommsTask,
                              "Comms Task",
-                             TASK_STACK_SIZE,
+                             COMMS_TASK_STACK_SIZE,
                              nullptr,
                              1,
                              nullptr);
