@@ -139,8 +139,12 @@ ApiResult api_get_peer_mood(uint32_t known_version, Moods &peer_mood, uint32_t &
         return API_BAD_RESPONSE;
     }
 
-    int mood_id = json_doc["mood_id"] | -1;
-    int version = json_doc["version"] | 0;
+    if (!json_doc["mood_id"].is<int>() || !json_doc["version"].is<int>()) {
+        return API_BAD_RESPONSE;
+    }
+
+    int mood_id = json_doc["mood_id"].as<int>();
+    int version = json_doc["version"].as<int>();
 
     if (mood_id < 0 || mood_id >= MOOD_COUNT || version <= 0) {
         return API_BAD_RESPONSE;
@@ -151,4 +155,3 @@ ApiResult api_get_peer_mood(uint32_t known_version, Moods &peer_mood, uint32_t &
 
     return API_OK;
 }
-
