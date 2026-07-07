@@ -1,2 +1,16 @@
 .claude/
 Docs/doxygen
+.env
+*.db
+*.sqlite
+*.sqlite3
+*.pem
+*.key
+Firmware/include/secrets.h
+Firmware/.pio/
+Firmware/.venv/
+Firmware/.vscode/
+server/.venv/
+*.bin
+*.elf
+*.map
