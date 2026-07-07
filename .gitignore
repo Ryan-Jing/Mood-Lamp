@@ -8,9 +8,9 @@ Docs/doxygen
 *.key
 Firmware/include/secrets.h
 Firmware/.pio/
-Firmware/.venv/
 Firmware/.vscode/
-server/.venv/
+Server/.venv/
+.venv/
 *.bin
 *.elf
 *.map
