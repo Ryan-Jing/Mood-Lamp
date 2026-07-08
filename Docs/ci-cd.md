@@ -1,128 +1,191 @@
-# Mood Lamp — Firmware CI/CD
+# Mood Lamp - Firmware CI/CD
 
-Automated build, test, and static analysis for the Mood Lamp firmware, driven by
-GitHub Actions, plus locally-run Doxygen docs and a pre-push hook.
-
-> **Why this replaces the old OtO report.** The prior write-up targeted **ESP-IDF**
-> on **ESP32/ESP32-S3 (xtensa)** and leaned on Docker + `idf.py` + `qemu-system-xtensa`.
-> This project is **PlatformIO + Arduino** on the **XIAO ESP32-C3 (RISC-V)**. That
-> changes almost everything: no Docker/IDF layer (PlatformIO CI is just `pip install
-> platformio && pio run`), cppcheck must run as C++ (not `--std=c99`), and unit tests run
-> natively on the host instead of on-target. The sections below are the corrected,
-> project-specific setup.
-
----
+Automated checks are centered on the ESP32 firmware: compile the real target, run host-side unit tests
+for portable logic, and run cppcheck before code reaches `main`.
 
 ## Overview
 
 | Stage | Where | Tool | Gate? |
 |---|---|---|---|
-| Compile firmware | CI + pre-push (build only in CI) | PlatformIO (`pio run`) | Yes |
-| Unit tests (logic) | CI | PlatformIO `native` env + Unity, host-compiled | Yes |
-| Static analysis | CI + **pre-push** | cppcheck (C++17) | Yes |
-| API docs | local (`doxygen Doxyfile`) | Doxygen | n/a |
+| Firmware compile | GitHub Actions | PlatformIO `pio run -e seeed_xiao_esp32c3` | Yes |
+| Native unit tests | GitHub Actions | PlatformIO `native` env + Unity | Yes |
+| Static analysis | GitHub Actions + local pre-push | cppcheck as C++17 | Yes |
+| API docs | Local only | Doxygen | No |
 
-> On-target emulation (QEMU `esp32c3`) was evaluated and dropped: the Arduino core panics
-> at flash init under QEMU (`assert failed: do_core_init … flash_ret == ESP_OK`), a known
-> emulator limitation, not a firmware bug. Not worth chasing for a boot smoke test — the
-> native tests cover the logic, and real hardware covers the boot.
+This project is PlatformIO + Arduino on a Seeed XIAO ESP32-C3. It does not use ESP-IDF CI, Docker,
+or QEMU boot tests. The useful CI signal today is:
 
-Two design decisions carry the whole thing:
-
-1. **Test logic on the host, not the chip.** `mood_frame`, the mood table, and (later)
-   the button FSM are pure functions of their inputs. Compiling them with the CI runner's
-   own gcc (`pio test -e native`) runs them in seconds with real coverage — no emulator.
-2. **Keep hardware-independent code hardware-independent.** `moods.h` includes `<stdint.h>`
-   (not `<Arduino.h>`) and `led_effects.cpp` uses `M_PI` (not Arduino's `PI`), so both
-   compile on the host. Anything touching `digitalRead`/NeoPixel stays out of the native build.
-
----
+- compile the actual firmware against the Arduino/PlatformIO toolchain;
+- unit-test hardware-independent logic on the host;
+- run cppcheck with the same settings locally and in CI.
 
 ## GitHub Actions
 
-### `.github/workflows/ci.yml` — on push & PR to `main`
+`.github/workflows/ci.yml` runs on pushes and pull requests to `main`.
 
-Three jobs, run in parallel:
+### `build`
 
-- **build** — installs PlatformIO, regenerates `moods.h` from `moods.yaml`, runs
-  `pio run -e seeed_xiao_esp32c3`, uploads the `.bin`s as an artifact.
-- **native-test** — `pio test -e native`. Compiles only the portable sources
-  (`build_src_filter` in `platformio.ini`) and runs the Unity suite in `Firmware/test/`.
-- **cppcheck** — installs cppcheck, runs it as C++17 over `Firmware/src` with
-  `--error-exitcode=1`, so any finding fails the job.
+The build job:
 
-Each job regenerates `moods.h` first, so a stale committed header can never hide a
-`moods.yaml` change.
+1. checks out the repo;
+2. installs Python 3.11;
+3. caches PlatformIO and pip downloads;
+4. installs PlatformIO and PyYAML;
+5. regenerates `Firmware/include/moods.h` from `Utils/moods.yaml`;
+6. copies `Firmware/include/secrets.example.h` to `Firmware/include/secrets.h`;
+7. runs `pio run -e seeed_xiao_esp32c3` from `Firmware/`;
+8. uploads the generated `.bin` files as a workflow artifact.
 
-Documentation is **not** in CI — it's generated on demand locally (see below).
+The artifact is a compile artifact, not a ready-to-deploy private firmware image. It is built with the
+placeholder values from `secrets.example.h`, so server communication will not work until a local build
+uses a real `Firmware/include/secrets.h`.
 
----
+### `native-test`
 
-## Static analysis (cppcheck)
+The native test job:
 
-Runs in CI **and** locally as a pre-push hook, with identical settings so local == CI:
+1. installs PlatformIO and PyYAML;
+2. regenerates `moods.h`;
+3. creates the placeholder `secrets.h`;
+4. runs `pio test -e native`.
 
+The `native` environment in `Firmware/platformio.ini` intentionally compiles only portable source:
+
+```ini
+build_src_filter = -<*> +<hal/led_effects.cpp>
 ```
-cppcheck --enable=warning,style,performance,portability \
-  --std=c++17 --language=c++ --error-exitcode=1 --inline-suppr \
-  -I include --suppressions-list=.cppcheck-suppressions src
-```
 
-- **`--std=c++17 --language=c++`** — this is C++ (Arduino), not the `--std=c99` from the old report.
-- **`--error-exitcode=1`** — any finding fails the check.
-- **`Firmware/.cppcheck-suppressions`** — suppresses `missingInclude*` (Arduino/library headers
-  aren't on cppcheck's path — expected) and `unusedFunction` (cross-TU false positives on HAL
-  entry points), plus cppcheck's own nags.
+This keeps host tests away from Arduino-only hardware code such as `digitalRead`, Wi-Fi, NimBLE, and
+`Adafruit_NeoPixel`. The current native test surface is the mood animation logic in `mood_frame()`.
 
-> Difference vs. the compiler: `pio run` catches language errors and (some) `-Wall` warnings
-> during codegen; cppcheck does deeper *flow* analysis it can't — null-deref, uninitialised
-> reads, out-of-bounds indexing, dead code — **without** compiling, which is why the cppcheck
-> job doesn't build the project first (the old report's "build IDF first" step was unnecessary).
+### `cppcheck`
 
----
+The static-analysis job:
 
-## Documentation (Doxygen)
+1. installs PyYAML and cppcheck;
+2. regenerates `moods.h`;
+3. creates the placeholder `secrets.h`;
+4. runs cppcheck inside `Firmware/`.
 
-Generated **locally on demand** (not in CI): from `Firmware/`, run `doxygen Doxyfile`
-and open `Firmware/doxygen/html/index.html`.
-
-- Config: `Firmware/Doxyfile` (`INPUT = include src ../README.md`, `RECURSIVE = YES`,
-  `EXTRACT_ALL = YES`, HTML only, `OUTPUT_DIRECTORY = doxygen`).
-- Theme: `Firmware/doxygen-custom.css` — a minimalist **black & white** stylesheet loaded via
-  `HTML_EXTRA_STYLESHEET`. Doxygen 1.9+ drives colours through CSS variables, so the theme
-  overrides those plus flattens the default blue gradient chrome to grayscale.
-- Output `Firmware/doxygen/` is git-ignored (generated).
-
----
-
-## One-time setup
-
-1. **Enable the pre-push hook** (per clone):
-   ```bash
-   chmod +x .githooks/pre-push
-   git config core.hooksPath .githooks
-   ```
-   Requires `cppcheck` on PATH (`brew install cppcheck`). Bypass once with `git push --no-verify`.
-2. **Run the mood generator locally** (needs PyYAML; system Python may need a venv):
-   ```bash
-   python3 -m venv .venv && source .venv/bin/activate && pip install pyyaml
-   python3 Utils/generate_moods.py
-   ```
-
-## Running locally
+Current command:
 
 ```bash
-cd Firmware
-pio run -e seeed_xiao_esp32c3     # build
-pio test -e native               # host unit tests
-doxygen Doxyfile                 # docs -> Firmware/doxygen/html/index.html
-cppcheck --enable=warning,style,performance,portability --std=c++17 \
-  --language=c++ -I include --suppressions-list=.cppcheck-suppressions src
+cppcheck --enable=warning,style,performance,portability \
+  --std=c++17 --language=c++ --error-exitcode=1 --inline-suppr \
+  -I include \
+  --suppressions-list=.cppcheck-suppressions \
+  src
 ```
 
-## Open items / next steps
+`--error-exitcode=1` makes any reported finding fail the job. `--inline-suppr` allows deliberate
+source-level suppressions, and `.cppcheck-suppressions` covers expected false positives such as
+missing Arduino/library include paths.
 
-- [ ] Add native tests for the button FSM once `show_mood_button_handle` /
-      `select_mood_button_handle` are split from the `digitalRead` HAL.
-- [ ] Add gcov/lcov coverage reporting to the native-test job.
-- [ ] Consider a `moods.h` drift check (regenerate + `git diff --exit-code`) in CI.
+## Secrets in CI
+
+`Firmware/include/secrets.h` is intentionally ignored by git because it contains:
+
+```cpp
+#define SERVER_URL "https://..."
+#define DEVICE_TOKEN "..."
+#define ROOT_CA "..."
+```
+
+Ignoring that file is correct, but the firmware includes `secrets.h`, so CI still needs a file with
+that name. The repository solves this with `Firmware/include/secrets.example.h`, which contains dummy
+values. Each CI job copies the example into place before building, testing, or running cppcheck:
+
+```bash
+cp Firmware/include/secrets.example.h Firmware/include/secrets.h
+```
+
+Rules:
+
+- commit `secrets.example.h`;
+- never commit `secrets.h`;
+- do not flash CI artifacts to real devices unless you intentionally provide real secrets during that
+  build;
+- do not put raw device tokens into workflow logs.
+
+## Local Setup
+
+Enable the pre-push hook once per clone:
+
+```bash
+chmod +x .githooks/pre-push
+git config core.hooksPath .githooks
+```
+
+Install local tools:
+
+```bash
+brew install cppcheck doxygen
+python3 -m venv .venv
+source .venv/bin/activate
+pip install platformio pyyaml
+```
+
+Generate the mood table after changing `Utils/moods.yaml`:
+
+```bash
+python Utils/generate_moods.py
+```
+
+Create `Firmware/include/secrets.h` before local firmware builds. For compile-only work, the example
+is enough:
+
+```bash
+cp Firmware/include/secrets.example.h Firmware/include/secrets.h
+```
+
+For flashing a real lamp, edit `Firmware/include/secrets.h` with that device's real server URL, token,
+and trusted root CA.
+
+## Running Locally
+
+From the repo root:
+
+```bash
+python Utils/generate_moods.py
+```
+
+From `Firmware/`:
+
+```bash
+pio run -e seeed_xiao_esp32c3
+pio test -e native
+doxygen Doxyfile
+cppcheck --enable=warning,style,performance,portability \
+  --std=c++17 --language=c++ --error-exitcode=1 --inline-suppr \
+  -I include \
+  --suppressions-list=.cppcheck-suppressions \
+  src
+```
+
+The pre-push hook currently runs cppcheck only. It does not run `pio run` or `pio test`, so run those
+manually before pushing larger firmware changes.
+
+## Generated Files and Ignored Files
+
+Expected generated or local-only files:
+
+| Path/pattern | Reason |
+|---|---|
+| `Firmware/include/secrets.h` | Real server URL, token, and trusted root CA. |
+| `.venv/`, `Server/.venv/` | Python virtual environments. |
+| `__pycache__/`, `*.pyc` | Python bytecode cache. |
+| `*.db`, `*.sqlite`, `*.sqlite3` | Local server databases with token hashes and device state. |
+| `*.pem`, `*.key` | Certificate/private-key material. |
+| `Firmware/.pio/` | PlatformIO build/cache output. |
+| `Docs/doxygen/` | Generated Doxygen documentation. |
+| `*.bin`, `*.elf`, `*.map` | Firmware build artifacts. |
+
+## Open Items
+
+1. Add native tests for button gesture handling once the state-machine logic is isolated from the
+   Arduino GPIO calls.
+2. Add server tests for auth failure, pair isolation, mood validation, and `ETag`/`304` polling.
+3. Consider a CI drift check that regenerates `moods.h` and fails if `git diff --exit-code` is not
+   clean.
+4. Decide whether release firmware should ever be built in CI with encrypted GitHub secrets, or only
+   built locally on trusted machines.

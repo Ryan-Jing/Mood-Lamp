@@ -1,169 +1,310 @@
-# Mood Lamp — Architecture
+# Mood Lamp - Architecture
 
-A mini device that shares one user's "mood" to a second **paired** device wirelessly, shown as
-RGB LED colours/patterns. Exactly two devices talk to each other through a small server; each
-device displays the *other* device's mood by default, and the user sets their own mood with a
-single physical button.
+Two paired ESP32 mood lamps share state through a small server. Each lamp shows the peer's mood by
+default, while the local button selects this device's own mood and posts it to the server.
 
----
+## Key Decisions
 
-## Key decisions
-
-| Area | Choice | Notes |
+| Area | Current choice | Notes |
 |---|---|---|
-| MCU | Seeed XIAO **ESP32-C3** (single-core RISC-V, WiFi + BLE) | Powered via on-board USB-C. |
-| LED | SparkFun **13282** — a single **WS2801** RGB LED | SPI-like: data (SDI) + clock (CKI), 24 bits/colour, latch by holding clock low ≥500 µs. |
-| Firmware framework | **PlatformIO + Arduino-ESP32** | FreeRTOS is built into the core. |
-| Device ↔ server | **HTTPS + polling** to start; MQTT-over-TLS as a later upgrade | Keep the transport behind an interface so the swap is cheap. |
-| Server | **Python + FastAPI** behind **Caddy** (auto-TLS) | Same language as the BLE provisioning app. |
+| MCU | Seeed XIAO ESP32-C3 | Single-core RISC-V board with Wi-Fi and BLE. |
+| Firmware | PlatformIO + Arduino-ESP32 | Uses FreeRTOS tasks from the Arduino core. |
+| LED | Single WS2812B/NeoPixel-style RGB LED | Driven by `Adafruit_NeoPixel` on `LED_DIN_PIN`. |
+| Provisioning | NimBLE GATT + Python scripts in `Utils/` | BLE is used to send Wi-Fi SSID/password only. |
+| Device-to-server | HTTPS polling | The ESP32 posts its mood and polls the peer mood about every 10 seconds. |
+| Server | FastAPI + SQLite on the RPi CM5 | `uvicorn` runs under `systemd`; Tailscale Funnel provides public HTTPS. |
+| Auth | Per-device bearer token | The server hashes stored tokens and derives identity from the bearer token. |
 
-**Guiding security principle:** the device's identity comes from its *credential*, never from an ID
-in the request body. The server resolves "who is calling" from the auth token, then looks up that
-device's mood/peer.
+The server must never trust a device ID from the request body. A device proves who it is with its
+bearer token, then the server decides which pair and peer it is allowed to access.
 
----
+## Repository Layout
 
-## 1. Repository layout
-
-```
-mood-lamp/
-├── Docs/
-│   └── architecture.md        # this file
-├── shared/
-│   └── moods.yaml             # single source of truth: mood id -> name, colour, pattern
-├── tools/
-│   └── gen_moods.py           # moods.yaml -> Firmware/include/moods.h (run on your PC)
-├── Firmware/                  # ESP32-C3 (PlatformIO)
-│   ├── platformio.ini
-│   ├── include/               # headers (moods.h is GENERATED)
-│   └── src/                   # modules (see §2)
-├── provisioning/             # Python BLE setup app
-└── server/                   # FastAPI backend
-```
-
-The important idea is **`shared/moods.yaml` as one source of truth**: firmware, server, and the
-provisioning app must all agree on what "mood 7" means. Edit the YAML, regenerate, and everything
-stays in sync.
-
----
-
-## 2. Firmware architecture (ESP32-C3)
-
-### 2.1 Module layout
-
-```
-include/                      src/
-├── app_state.h               ├── main.cpp            # tasks + state-machine dispatch
-├── moods.h   (GENERATED)     ├── app_state.cpp       # per-state handlers
-├── identity.h                ├── identity.cpp
-├── hal/                      ├── hal/
-│   ├── led.h                 │   ├── led.cpp         # WS2801 driver + led_render()
-│   ├── button.h              │   ├── button.cpp      # debounced button + FSM handlers
-│   └── led_effects.h         │   └── led_effects.cpp # pattern math (solid/breathe/blink)
-├── net/                      ├── net/
-│   ├── wifi_mgr.h            │   ├── wifi_mgr.cpp
-│   ├── api_client.h          │   ├── api_client.cpp
-│   └── ble_provision.h       │   └── ble_provision.cpp
-└── storage/                  └── storage/
-    └── config_store.h            └── config_store.cpp
+```text
+Mood-Lamp/
+|-- Docs/
+|   |-- architecture.md
+|   `-- ci-cd.md
+|-- Firmware/
+|   |-- include/
+|   |   |-- config.h
+|   |   |-- moods.h                 # generated from Utils/moods.yaml
+|   |   |-- secrets.example.h       # safe placeholder for CI/public repo
+|   |   |-- secrets.h               # ignored local secrets file
+|   |   |-- state.h
+|   |   |-- hal/
+|   |   `-- net/
+|   |-- src/
+|   |   |-- main.cpp                # task creation and top-level state loops
+|   |   |-- state.cpp               # mutex/queue shared task interface
+|   |   |-- hal/
+|   |   `-- net/
+|   |-- test/
+|   `-- platformio.ini
+|-- Server/
+|   |-- app.py                     # FastAPI API
+|   `-- database_init.py           # SQLite schema + token generation
+|-- Utils/
+|   |-- moods.yaml                 # source of truth for mood IDs
+|   |-- generate_moods.py          # YAML -> Firmware/include/moods.h
+|   |-- ble_check.py
+|   `-- provision.py
+`-- .github/workflows/ci.yml
 ```
 
-Layering rule: headers include **down** the stack (app → hal), never in a cycle. When two headers
-seem to need each other, one side uses a forward declaration instead of a full include.
+`Utils/moods.yaml` is the mood source of truth. After changing it, regenerate
+`Firmware/include/moods.h` with `python Utils/generate_moods.py`.
 
-### 2.2 Two FreeRTOS tasks
+## Firmware Architecture
 
-- **`vLampTask` (app/UI)** — fast fixed tick (~100 Hz). Reads the button, runs the `AppState`
-  machine, renders the LED. **Never blocks.**
-- **`vCommsTask` (wireless)** — owns WiFi + BLE + server I/O. **May block** (WiFi/HTTP calls). Uses
-  a queue-with-timeout so one call both waits for a "push my mood" command and polls the server on
-  an interval.
+### Module Layout
 
-Each task owns its own state. They exchange only small data: a mutex-protected snapshot
-(peer mood, link status) that the lamp task reads, and a queue for "push this mood" going the other
-way. `LampState` stays task-local, so passing it by reference to the FSM handlers needs no locking.
+```text
+Firmware/include/                 Firmware/src/
+|-- config.h                      |-- main.cpp
+|-- moods.h                       |-- state.cpp
+|-- state.h                       |-- hal/
+|-- secrets.example.h             |   |-- button.cpp
+|-- secrets.h                     |   |-- led.cpp
+|-- hal/                          |   `-- led_effects.cpp
+|   |-- button.h                  `-- net/
+|   |-- led.h                         |-- api.cpp
+|   `-- led_effects.h                 |-- ble.cpp
+`-- net/                              `-- wifi.cpp
+    |-- api.h
+    |-- ble.h
+    `-- wifi.h
+```
 
-### 2.3 The `AppState` machine
+Important boundaries:
 
-| State | Meaning |
+- `main.cpp` owns the two FreeRTOS tasks and the top-level state transitions.
+- `state.cpp/h` owns cross-task communication: mutex-protected comms state and peer mood, plus queues
+  for posted moods and user commands.
+- `button.cpp` reads/debounces the physical button and converts gestures into state changes or
+  `UserCommand` messages.
+- `led_effects.cpp` is pure animation math and is compiled into native unit tests.
+- `led.cpp` is hardware-facing and owns `Adafruit_NeoPixel`.
+- `wifi.cpp` owns Wi-Fi connect/disconnect and NVS Wi-Fi credential storage.
+- `ble.cpp` owns the BLE provisioning GATT service.
+- `api.cpp` owns HTTPS calls to the FastAPI server.
+
+### Task Model
+
+The firmware runs two long-lived tasks:
+
+- `vLampTask` is the UI task. It reads the button every 10 ms, chooses the lamp state, and renders the
+  LED. It should stay non-blocking.
+- `vCommsTask` is the network task. It owns BLE, Wi-Fi, SNTP readiness, HTTP requests, API retry
+  counting, and NVS Wi-Fi credential operations. This task may block on network operations.
+
+The tasks share only small pieces of data:
+
+- `CommsStatus` through `shared_set_net_state()` / `shared_get_net_state()`.
+- Peer mood through `shared_set_peer_mood()` / `shared_get_peer_mood()`.
+- Local mood posts through `shared_post_mood()` / `shared_get_posted_mood()`.
+- Long-hold user commands through `shared_post_user_command()` / `shared_take_user_command()`.
+
+### State Model
+
+`LampState` is local to `vLampTask`.
+
+| Field | Meaning |
 |---|---|
-| `PROVISIONING` | No WiFi credentials — BLE advertising so the Python app can send SSID/password. |
-| `CONNECTING` | Joining WiFi + authenticating to the server. |
-| `SHOW_MOOD` | Default — display the peer's current mood (or a default colour if no peer). |
-| `SELECT_MOOD` | User is choosing their own mood: tap to cycle, hold to confirm. |
+| `self_mood` | This lamp's locally selected mood. This is posted to the server and shown on the peer lamp. |
+| `peer_mood` | The paired lamp's latest mood. This is what this lamp displays in normal mode. |
+| `application_state` | UI/rendering state: `BLE_STATUS`, `NET_STATUS`, `SHOW_MOOD`, or `SELECT_MOOD`. |
+| `button_state` / timers | Debounced input and hold-duration bookkeeping. |
 
-Button gestures are **decided on release, gated by hold duration** (tap vs 5 s hold vs 10 s hold),
-which keeps each state's gesture unambiguous and avoids one hold "carrying over" into the next state.
+`NetState` is local to `vCommsTask`.
 
-### 2.4 LED pipeline (mood → pixels)
+| Field | Meaning |
+|---|---|
+| `comms_status` | Network state: `BLE_PROVISIONING`, `BLE_CONNECTED`, `NET_CONNECTING`, `NET_CONNECTED`, or `NET_DISCONNECTED`. |
+| `wifi_credentials` | Last loaded or newly provisioned Wi-Fi SSID/password. |
+| `peer_mood` / `peer_version` | Last peer mood returned by the server and its ETag/version. |
+| `mood_to_post` / `has_mood_to_post` | Pending local mood that must be sent to the server. |
+| `wifi_retry_count` / `poll_retry_count` | Retry counters used before backing out of network work. |
 
+### Button Gestures
+
+Button behavior is intentionally decided on release so one hold does not trigger multiple actions.
+
+| Gesture | State requirement | Result |
+|---|---|---|
+| Short press | `SELECT_MOOD` | Cycle `self_mood`. |
+| Hold `MOOD_SET_TIMER` to `BLE_SET_TIMER` | `SHOW_MOOD` and `NET_CONNECTED` | Enter `SELECT_MOOD`. |
+| Hold `MOOD_SET_TIMER` to `BLE_SET_TIMER` | `SELECT_MOOD` and `NET_CONNECTED` | Post `self_mood` and return to `SHOW_MOOD`. |
+| Hold at least `BLE_SET_TIMER` | Any state | Toggle BLE provisioning on/off with `USER_COMMAND_START_BLE` or `USER_COMMAND_STOP_BLE`. |
+| Hold at least `WIFI_CLEAR_TIMER` | Any state | Clear NVS Wi-Fi credentials and start BLE provisioning. |
+
+Mood selection is blocked when the lamp is not connected to the server. If Wi-Fi/API connectivity is
+lost while selecting a mood, the lamp returns to `SHOW_MOOD`.
+
+### LED Pipeline
+
+```text
+Utils/moods.yaml
+    |
+    `-- Utils/generate_moods.py
+            |
+            `-- Firmware/include/moods.h
+                    |
+                    `-- get_mood_definition(mood)
+                            |
+                            `-- mood_frame(def, millis(), r, g, b)
+                                    |
+                                    `-- led_write(r, g, b)
 ```
-shared/moods.yaml  --gen_moods.py-->  include/moods.h (enum + MOOD_TABLE + mood_def())
-                                             │
-led_render(mood)  --mood_def(mood)-->  { r,g,b, pattern, period_ms }
-                                             │
-                          led_effects: mood_frame(def, millis()) --> instantaneous r,g,b
-                                             │
-                                     led_write(r,g,b)  --24 bits + 500µs latch-->  WS2801
+
+`led_effects.cpp` contains the testable animation function `mood_frame()`. `led.cpp` wraps that pure
+logic with the physical NeoPixel driver.
+
+### BLE, Wi-Fi, and NVS
+
+On boot, the comms task checks NVS for Wi-Fi credentials:
+
+- If no credentials exist, the device starts BLE provisioning.
+- If credentials exist, BLE stays off and the device tries to connect to Wi-Fi.
+
+The BLE service advertises as `MoodLamp` and exposes characteristics for:
+
+- SSID write
+- password write
+- apply write
+- status read/notify
+
+When the Python provisioning script writes SSID/password and then writes the apply characteristic,
+`vCommsTask` saves the credentials to NVS, notifies `"connecting"`, stops BLE, and transitions to
+`NET_CONNECTING`.
+
+Only Wi-Fi credentials are stored in NVS today. Server configuration lives in the ignored local
+`Firmware/include/secrets.h` file:
+
+```cpp
+#define SERVER_URL "https://your-tailnet-or-funnel-host"
+#define DEVICE_TOKEN "one-device-token-from-database_init.py"
+#define ROOT_CA R"EOF(
+-----BEGIN CERTIFICATE-----
+...
+-----END CERTIFICATE-----
+)EOF"
 ```
 
-- **`moods.h`** (generated) holds the `Moods` enum, the `MoodDef` table, and `mood_def()`.
-- **`led_effects`** turns *(mood definition, time)* into an instantaneous colour (solid / breathe /
-  blink) — a pure function, easy to test.
-- **`led`** is the WS2801 hardware driver: `led_init()`, `led_write(r,g,b)`, and `led_render(mood)`
-  which glues the two together each tick.
+The public `secrets.example.h` exists only so CI and new clones can compile without real secrets.
 
-### 2.5 BLE + WiFi + persistence
+### Network Behavior
 
-- Run **BLE only during `PROVISIONING`**, then de-init to free RAM (use NimBLE-Arduino).
-- GATT service exposes write characteristics for `wifi_ssid`, `wifi_pass`, `server_url`, plus a
-  read-only `device_id` and a `status` notify. The **device secret is never writable over BLE**.
-- Store WiFi creds, `device_id`, `device_secret`, `server_url`, and `last_mood` in **NVS**.
+After Wi-Fi joins, `api_wait_for_time()` waits for SNTP before HTTPS requests. This matters because
+certificate validation requires a sane system time.
 
----
+When connected:
 
-## 3. Server architecture
+- pending local moods are sent with `POST /v1/mood`;
+- the peer mood is polled with `GET /v1/peer/mood`;
+- the last known server `version` is sent as `If-None-Match`;
+- a `304 Not Modified` response is treated as a successful no-op.
 
-Minimal FastAPI service, but with real security.
+If Wi-Fi drops or API calls repeatedly fail, the comms task disconnects Wi-Fi and returns to
+`NET_CONNECTING`. After the configured Wi-Fi retry limit, it enters `NET_DISCONNECTED`; the lamp shows
+the idle mood until the user chooses to re-enter BLE provisioning or clear Wi-Fi credentials.
 
-### 3.1 Data model
+## Server Architecture
 
-- **Device**: `device_id` (PK, baked at flash), `secret_hash`, `pair_id`, `last_seen`.
-- **Pair**: `pair_id`, `device_a`, `device_b` — enforces "exactly two devices talk."
-- **MoodState**: `device_id`, `mood_id`, `updated_at`, `version` (monotonic, for change detection).
+The current server is a small FastAPI application backed by SQLite:
 
-### 3.2 API (all over HTTPS, all authenticated)
+- `Server/app.py` defines the API.
+- `Server/database_init.py` creates the database tables and prints raw device tokens once.
+- `MOOD_DB` selects the database path.
+- `MOOD_COUNT` controls the valid mood ID range.
 
-- `POST /v1/mood` — body `{ "mood_id": 7 }`. Caller identity from the **auth token**, not the body.
-  Validates `mood_id` in range, updates that device's mood, bumps `version`.
-- `GET /v1/peer/mood` — returns the paired partner's mood + `version`. Supports `If-None-Match` on
-  `version` → cheap `304 Not Modified` polling (this is the "only update on change" mechanism).
-- `GET /v1/health` — unauthenticated liveness.
+The intended production shape on the RPi CM5 is:
 
-### 3.3 Security checklist
+```text
+ESP32
+  |
+  | HTTPS
+  v
+Tailscale Funnel hostname
+  |
+  | proxy to localhost
+  v
+uvicorn on 127.0.0.1:8000
+  |
+  v
+FastAPI app + SQLite database
+```
 
-- **TLS everywhere** (Caddy auto-provisions Let's Encrypt; the device verifies the CA / pins the cert).
-- **Per-device secrets**, stored hashed. No shared global secret.
-- **Server derives identity from the credential**, never from a client-claimed ID.
-- **Authorization:** a device may only write its own mood and read its paired partner's.
-- **Rate limiting** per device; **input validation** via Pydantic (mood in known range).
-- **BLE provisioning hardening:** passkey bonding or a PSK-encrypted WiFi password; secret not
-  settable over BLE.
-- Minimal data, no PII, never log secrets.
+Tailscale Funnel terminates public HTTPS and proxies to local HTTP on the Pi. The FastAPI process can
+therefore bind to `127.0.0.1:8000` under `systemd`; it does not need to listen directly on the public
+network.
 
-### 3.4 Pairing
+### Data Model
 
-Either **flash-time pairing** (bake the same `pair_id` into both units) or a **pairing-code flow**
-(user links the two via a short-lived code). Start with flash-time; add codes later.
+`database_init.py` creates three tables:
 
----
+| Table | Purpose |
+|---|---|
+| `pairs` | Pair records, keyed by `pair_id`. |
+| `devices` | Device records with `device_id`, `pair_id`, `display_name`, `token_hash`, and `last_seen`. |
+| `mood_state` | Current mood for each device: `device_id`, `mood_id`, `version`, and `updated_at`. |
 
-## 4. Suggested build order (de-risk hardware first)
+The raw device token is printed only when the device row is first created. The database stores only
+`sha256(token)`, so a lost token should be replaced by creating/updating that device's token.
 
-1. **LED + button HAL** — WS2801 colours + reliable debounced long/short press.
-2. **State machine + mood-select UX** — fully offline.
-3. **Server skeleton** — FastAPI, SQLite, Bearer auth, plain HTTP locally.
-4. **Firmware ↔ server over WiFi** — hardcoded creds first, then TLS + cert verification.
-5. **BLE provisioning** — replace hardcoded creds with the BLE flow + Python app.
-6. **Pairing + peer display** — two physical devices showing each other's mood end to end.
-7. **Harden** — HMAC signing, rate limiting, Caddy auto-TLS deploy, optional flash encryption.
+### API
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `GET /v1/health` | No | Liveness check. |
+| `GET /v1/me` | Bearer token | Debug/identity check for the current token. |
+| `POST /v1/mood` | Bearer token | Set the caller's own mood. Body: `{ "mood_id": 4 }`. |
+| `GET /v1/peer/mood` | Bearer token | Return the paired device's mood, version, and update time. |
+
+`POST /v1/mood` validates `mood_id` using Pydantic: `0 <= mood_id < MOOD_COUNT`.
+
+`GET /v1/peer/mood` requires exactly one peer in the caller's pair. It returns an `ETag` based on the
+peer mood version. If the ESP32 sends the matching `If-None-Match` value, the server returns `304`.
+
+### Security Notes
+
+Safe to commit:
+
+- source code;
+- `Firmware/include/secrets.example.h`;
+- docs;
+- generated `Firmware/include/moods.h` if you want the firmware build to work without rerunning the
+  generator.
+
+Do not commit:
+
+- `Firmware/include/secrets.h`;
+- `.env`;
+- SQLite databases such as `mood.db`;
+- raw device tokens;
+- private keys, PEM files, or certificate material you intend to keep private;
+- `.venv`, `__pycache__`, `.pyc`, PlatformIO build output, and firmware binaries.
+
+BLE provisioning is currently a convenience channel for Wi-Fi setup, not a hardened ownership flow.
+Anyone nearby who can connect while provisioning is active may be able to write Wi-Fi credentials. Keep
+BLE off during normal operation, and consider passkey bonding or an app-side pairing secret before
+using this outside a trusted environment.
+
+## Build Order
+
+The current project has these pieces in place:
+
+1. LED/button HAL and mood animation logic.
+2. Two-task firmware state model.
+3. BLE Wi-Fi provisioning into NVS.
+4. Wi-Fi connect/retry/disconnect behavior.
+5. FastAPI + SQLite mood server.
+6. HTTPS polling client on the ESP32.
+7. CI firmware build, native tests, and cppcheck.
+
+Useful next work:
+
+1. Stop printing Wi-Fi passwords in debug logs before sharing logs or demos.
+2. Add native tests around the button gesture/state-machine behavior.
+3. Add server-side tests for auth, mood validation, pair isolation, and ETag/304 behavior.
+4. Add a real deployment note for renewing/replacing the ESP32 trusted root CA.

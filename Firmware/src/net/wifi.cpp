@@ -74,6 +74,10 @@ void clear_wifi_credentials() {
     prefs.begin(wifi_namespace, false);
     prefs.clear();
     prefs.end();
+
+    #ifdef PRINT_DEBUG
+        Serial.println("Wi-Fi credentials cleared from NVS");
+    #endif
 }
 
 bool wifi_connect(const WifiCredentials &credentials, uint32_t timeout_ms) {
