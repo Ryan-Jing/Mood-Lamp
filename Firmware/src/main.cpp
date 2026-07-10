@@ -96,12 +96,36 @@ void vCommsTask(void *pvParameters);
 /*------------------------------------------------------------------------------------------------*/
 
 static void set_shared_comms_status(NetState &set_net_state, CommsStatus set_comms_status) {
+    if (set_comms_status == BLE_PROVISIONING) {
+        set_net_state.ble_provisioning_started_ms = millis();
+    }
+    else {
+        set_net_state.ble_provisioning_started_ms = 0;
+    }
+
     set_net_state.comms_status = set_comms_status;
     shared_set_net_state(set_comms_status);
 }
 
 static bool has_saved_wifi_credentials(NetState &net_state) {
     return get_wifi_credentials(net_state.wifi_credentials);
+}
+
+static void stop_ble_and_resume_network(NetState &net_state) {
+    if (net_state.comms_status == BLE_PROVISIONING ||
+        net_state.comms_status == BLE_CONNECTED) {
+        ble_provisioning_stop();
+    }
+
+    net_state.wifi_retry_count = 0;
+    net_state.poll_retry_count = 0;
+
+    if (has_saved_wifi_credentials(net_state)) {
+        set_shared_comms_status(net_state, NET_CONNECTING);
+    }
+    else {
+        set_shared_comms_status(net_state, NET_DISCONNECTED);
+    }
 }
 
 void vLampTask(void *pvParameters) {
@@ -152,6 +176,12 @@ void vLampTask(void *pvParameters) {
         }
 
         switch (lamp_state.application_state) {
+
+            #ifdef PRINT_DEBUG
+                Serial.print("Current application state: ");
+                Serial.println(lamp_state.application_state);
+            #endif
+
             case BLE_STATUS:
                 mood_to_render = BLE;
                 break;
@@ -200,6 +230,12 @@ void vCommsTask(void *pvParameters) {
     for (;;) {
         UserCommand user_command;
         if (shared_take_user_command(&user_command)) {
+
+            #ifdef PRINT_DEBUG
+                Serial.print("User command received: ");
+                Serial.println(user_command);
+            #endif
+
             switch (user_command) {
                 case USER_COMMAND_START_BLE:
                     if (net_state.comms_status != BLE_PROVISIONING &&
@@ -211,20 +247,7 @@ void vCommsTask(void *pvParameters) {
                     break;
 
                 case USER_COMMAND_STOP_BLE:
-                    if (net_state.comms_status == BLE_PROVISIONING ||
-                        net_state.comms_status == BLE_CONNECTED) {
-                        ble_provisioning_stop();
-                    }
-
-                    net_state.wifi_retry_count = 0;
-                    net_state.poll_retry_count = 0;
-
-                    if (has_saved_wifi_credentials(net_state)) {
-                        set_shared_comms_status(net_state, NET_CONNECTING);
-                    }
-                    else {
-                        set_shared_comms_status(net_state, NET_DISCONNECTED);
-                    }
+                    stop_ble_and_resume_network(net_state);
                     break;
 
                 case USER_COMMAND_CLEAR_WIFI:
@@ -250,6 +273,10 @@ void vCommsTask(void *pvParameters) {
             case BLE_PROVISIONING:
                 if (ble_is_connected()) {
                     set_shared_comms_status(net_state, BLE_CONNECTED);
+                }
+                else if (millis() - net_state.ble_provisioning_started_ms >=
+                         BLE_PROVISIONING_TIMEOUT_MS) {
+                    stop_ble_and_resume_network(net_state);
                 }
                 break;
 
@@ -410,13 +437,20 @@ void lamp_application_init(LampState &lamp_state) {
 }
 
 void net_application_init(NetState &net_state) {
+    net_state.peer_mood = MOOD_1;
+    net_state.mood_to_post = MOOD_1;
+    net_state.peer_version = 0;
+    net_state.last_peer_poll_ms = 0;
+    net_state.ble_provisioning_started_ms = 0;
+    net_state.wifi_retry_count = 0;
+    net_state.poll_retry_count = 0;
+    net_state.has_mood_to_post = false;
+
     if (!get_wifi_credentials(net_state.wifi_credentials)) {
-        shared_set_net_state(BLE_PROVISIONING);
-        net_state.comms_status = BLE_PROVISIONING;
+        set_shared_comms_status(net_state, BLE_PROVISIONING);
     }
     else {
-        shared_set_net_state(NET_CONNECTING);
-        net_state.comms_status = NET_CONNECTING;
+        set_shared_comms_status(net_state, NET_CONNECTING);
 
         #ifdef PRINT_DEBUG
             Serial.println("Wi-Fi credentials found in NVS");
@@ -426,14 +460,6 @@ void net_application_init(NetState &net_state) {
             Serial.println(net_state.wifi_credentials.password);
         #endif
     }
-
-    net_state.peer_mood = MOOD_1;
-    net_state.mood_to_post = MOOD_1;
-    net_state.peer_version = 0;
-    net_state.last_peer_poll_ms = 0;
-    net_state.wifi_retry_count = 0;
-    net_state.poll_retry_count = 0;
-    net_state.has_mood_to_post = false;
 }
 
 void setup() {

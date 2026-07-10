@@ -124,19 +124,27 @@ The tasks share only small pieces of data:
 | `wifi_credentials` | Last loaded or newly provisioned Wi-Fi SSID/password. |
 | `peer_mood` / `peer_version` | Last peer mood returned by the server and its ETag/version. |
 | `mood_to_post` / `has_mood_to_post` | Pending local mood that must be sent to the server. |
+| `ble_provisioning_started_ms` | Time BLE provisioning entered advertising mode, used for the no-connection timeout. |
 | `wifi_retry_count` / `poll_retry_count` | Retry counters used before backing out of network work. |
 
 ### Button Gestures
 
-Button behavior is intentionally decided on release so one hold does not trigger multiple actions.
+Most button behavior is intentionally decided on release so one hold does not trigger multiple
+actions. The BLE exit gesture is handled as soon as the hold reaches `BLE_SET_TIMER` while BLE is
+active so it cannot fall through to the longer Wi-Fi clear gesture.
 
 | Gesture | State requirement | Result |
 |---|---|---|
 | Short press | `SELECT_MOOD` | Cycle `self_mood`. |
 | Hold `MOOD_SET_TIMER` to `BLE_SET_TIMER` | `SHOW_MOOD` and `NET_CONNECTED` | Enter `SELECT_MOOD`. |
 | Hold `MOOD_SET_TIMER` to `BLE_SET_TIMER` | `SELECT_MOOD` and `NET_CONNECTED` | Post `self_mood` and return to `SHOW_MOOD`. |
-| Hold at least `BLE_SET_TIMER` | Any state | Toggle BLE provisioning on/off with `USER_COMMAND_START_BLE` or `USER_COMMAND_STOP_BLE`. |
-| Hold at least `WIFI_CLEAR_TIMER` | Any state | Clear NVS Wi-Fi credentials and start BLE provisioning. |
+| Hold at least `BLE_SET_TIMER` | `BLE_PROVISIONING` or `BLE_CONNECTED` | Stop BLE provisioning and return to normal mood display. |
+| Hold `BLE_SET_TIMER` to `WIFI_CLEAR_TIMER` | Not in BLE mode | Start BLE provisioning with `USER_COMMAND_START_BLE`. |
+| Hold at least `WIFI_CLEAR_TIMER` | Not in BLE mode | Clear NVS Wi-Fi credentials and start BLE provisioning. |
+
+If BLE provisioning is advertising and no central connects within `BLE_PROVISIONING_TIMEOUT_MS`,
+the comms task stops BLE and resumes the normal network state: `NET_CONNECTING` when saved Wi-Fi
+credentials are present, otherwise `NET_DISCONNECTED`.
 
 Mood selection is blocked when the lamp is not connected to the server. If Wi-Fi/API connectivity is
 lost while selecting a mood, the lamp returns to `SHOW_MOOD`.

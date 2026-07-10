@@ -31,6 +31,7 @@
 #define PEER_POLL_INTERVAL_MS 10000
 #define API_RETRY_LIMIT 5
 #define SNTP_TIMEOUT_MS 15000
+#define BLE_PROVISIONING_TIMEOUT_MS 120000UL
 
 /*------------------------------------------------------------------------------------------------*/
 // CLASS DECLARATIONS                                                                             */

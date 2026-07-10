@@ -71,6 +71,10 @@ void get_button_state(ButtonState *state) {
 
 bool handle_user_button_commands(LampState &s) {
     if (s.button_state == BUTTON_PRESSED) {
+        if (s.button_long_press_handled) {
+            return true;
+        }
+
         if (s.button_press_time == 0) {
             s.button_press_time = s.current_time;
         }
@@ -78,6 +82,18 @@ bool handle_user_button_commands(LampState &s) {
         uint32_t held = s.current_time - s.button_press_time;
 
         if (held >= BLE_SET_TIMER * 1000) {
+            CommsStatus comms_status = shared_get_net_state();
+
+            if (comms_status == BLE_PROVISIONING || comms_status == BLE_CONNECTED) {
+                shared_post_user_command(USER_COMMAND_STOP_BLE);
+                s.application_state = SHOW_MOOD;
+                s.button_press_time = 0;
+
+                #ifdef PRINT_DEBUG
+                    Serial.println("User command: BLE stopped");
+                #endif
+            }
+
             s.button_long_press_handled = true;
             return true;
         }
@@ -93,6 +109,11 @@ bool handle_user_button_commands(LampState &s) {
             s.application_state = SHOW_MOOD;
             s.button_press_time = 0;
             s.button_long_press_handled = false;
+
+            #ifdef PRINT_DEBUG
+                Serial.println("User command: Wi-Fi credentials cleared");
+            #endif
+
             return true;
         }
 
@@ -101,15 +122,31 @@ bool handle_user_button_commands(LampState &s) {
 
             if (comms_status == BLE_PROVISIONING || comms_status == BLE_CONNECTED) {
                 shared_post_user_command(USER_COMMAND_STOP_BLE);
+
+                #ifdef PRINT_DEBUG
+                    Serial.println("User command: BLE stopped");
+                #endif
             }
             else {
                 shared_post_user_command(USER_COMMAND_START_BLE);
+
+                #ifdef PRINT_DEBUG
+                    Serial.println("User command: BLE started");
+                #endif
             }
 
             s.application_state = SHOW_MOOD;
             s.button_press_time = 0;
             s.button_long_press_handled = false;
             return true;
+        }
+
+        // No command fired (held < BLE_SET_TIMER). BLE_STATUS / NET_STATUS have no per-state
+        // handler to clear button_press_time, so a stale value would keep counting after
+        // release and spuriously fire a long-hold command ~BLE_SET_TIMER later. Clear it here.
+        // In SHOW_MOOD / SELECT_MOOD the per-state handlers own this timer, so leave it to them.
+        if (s.application_state == BLE_STATUS || s.application_state == NET_STATUS) {
+            s.button_press_time = 0;
         }
     }
 
@@ -138,7 +175,7 @@ void show_mood_button_handle(LampState &s) {
                 s.application_state = SELECT_MOOD;
 
                 #ifdef PRINT_DEBUG
-                    Serial.println("Entering mood selection mode");
+                    Serial.println("User command: Select mood mode");
                 #endif
             }
         }
@@ -163,7 +200,7 @@ void select_mood_button_handle(LampState &s) {
                 shared_post_mood(s.self_mood);
 
                 #ifdef PRINT_DEBUG
-                    Serial.print("Mood set to: ");
+                    Serial.print("User command: Mood set to: ");
                     Serial.println(s.self_mood);
                 #endif
             }
