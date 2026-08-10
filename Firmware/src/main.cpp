@@ -137,6 +137,7 @@ void vLampTask(void *pvParameters) {
 
         lamp_state.current_time = millis();
         get_button_state(&lamp_state.button_state);
+        update_button_event(lamp_state);
 
         bool button_consumed = handle_user_button_commands(lamp_state);
         CommsStatus comms_status = shared_get_net_state();
@@ -144,7 +145,7 @@ void vLampTask(void *pvParameters) {
         if (lamp_state.application_state == SELECT_MOOD && comms_status != NET_CONNECTED) {
             lamp_state.application_state = SHOW_MOOD;
             lamp_state.button_press_time = 0;
-            lamp_state.button_long_press_handled = false;
+            lamp_state.full_press_time = 0;
         }
 
         if (lamp_state.application_state != SELECT_MOOD) {
@@ -431,9 +432,10 @@ void lamp_application_init(LampState &lamp_state) {
     lamp_state.peer_mood = shared_get_peer_mood();
     lamp_state.application_state = SHOW_MOOD; // Show default mood pattern on startup
     lamp_state.button_state = BUTTON_RELEASED;
+    lamp_state.button_event = BUTTON_EVENT_NONE;
     lamp_state.button_press_time = 0;
+    lamp_state.full_press_time = 0;
     lamp_state.current_time = millis();
-    lamp_state.button_long_press_handled = false;
 }
 
 void net_application_init(NetState &net_state) {
@@ -464,10 +466,12 @@ void net_application_init(NetState &net_state) {
 
 void setup() {
     Serial.begin(115200);
+
     #if defined(PRINT_DEBUG)
         delay(2000);
         Serial.println("Mood Lamp Firmware v0.1");
     #endif
+
     shared_state_init();
 
     BaseType_t xLampReturned;

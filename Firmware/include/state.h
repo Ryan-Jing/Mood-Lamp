@@ -46,9 +46,10 @@ typedef struct LampState {
     Moods peer_mood;
     AppState application_state;
     ButtonState button_state;
+    ButtonEvent button_event;
     uint32_t button_press_time;
+    uint32_t full_press_time;
     uint32_t current_time;
-    bool button_long_press_handled;
 } LampState;
 
 enum CommsStatus

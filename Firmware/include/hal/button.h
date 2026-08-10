@@ -2,7 +2,8 @@
 /**
  * @file button.h
  * @author  Ryan Jing
- * @brief Debounced push-button input and the mood-select / provisioning gesture handlers.
+ * @brief Debounced dual-stage (half/full press) button input and the mood-select /
+ *        provisioning gesture handlers.
  *
  * @version 0.1
  * @date 2026-07-03
@@ -25,9 +26,8 @@
 // GLOBAL VARIABLES                                                                               */
 /*------------------------------------------------------------------------------------------------*/
 
-#define MOOD_SET_TIMER 5
-#define BLE_SET_TIMER 10
-#define WIFI_CLEAR_TIMER 20
+#define BLE_SET_TIMER 5
+#define WIFI_CLEAR_TIMER 10
 
 /*------------------------------------------------------------------------------------------------*/
 // CLASS DECLARATIONS                                                                             */
@@ -35,8 +35,18 @@
 
 enum ButtonState
 {
-    BUTTON_PRESSED,
-    BUTTON_RELEASED
+    BUTTON_RELEASED,
+    BUTTON_HALF_PRESSED,
+    BUTTON_FULL_PRESSED
+};
+
+enum ButtonEvent
+{
+    BUTTON_EVENT_NONE,
+    BUTTON_EVENT_HALF_TAP,       // Half stage pressed and released without reaching full
+    BUTTON_EVENT_FULL_TAP,       // Full stage pressed, released before BLE_SET_TIMER
+    BUTTON_EVENT_FULL_HOLD_BLE,  // Full stage held >= BLE_SET_TIMER, < WIFI_CLEAR_TIMER
+    BUTTON_EVENT_FULL_HOLD_WIFI  // Full stage held >= WIFI_CLEAR_TIMER
 };
 
 // Forward declaration; the full definition lives in state.h. The handlers below
@@ -51,7 +61,7 @@ struct LampState;
 /**************************************************************************************************/
 /**
  * @name
- * @brief Configure the button GPIO as an input.
+ * @brief Configure both button stage GPIOs as pulled-up inputs.
  *
  *
  *
@@ -62,7 +72,7 @@ void setup_button();
 /**************************************************************************************************/
 /**
  * @name
- * @brief Read the debounced button state (pressed or released).
+ * @brief Read the debounced dual-stage button state (released, half, or full press).
  *
  *
  * @param state
@@ -74,8 +84,20 @@ void get_button_state(ButtonState *state);
 /**************************************************************************************************/
 /**
  * @name
- * @brief Handle long-hold user commands that must work across all lamp states.
+ * @brief Decode the current press cycle into a ButtonEvent, emitted on release.
  *
+ *
+ * @param s
+ *
+ */
+/**************************************************************************************************/
+void update_button_event(LampState &s);
+
+/**************************************************************************************************/
+/**
+ * @name
+ * @brief Handle full-press gestures that work across all lamp states: full tap exits
+ *        BLE provisioning, full hold starts/stops BLE or clears Wi-Fi credentials.
  *
  * @param s
  *
@@ -88,7 +110,7 @@ bool handle_user_button_commands(LampState &s);
 /**************************************************************************************************/
 /**
  * @name
- * @brief Handle the button in SHOW_MOOD: hold to select a mood or enter provisioning.
+ * @brief Handle the button in SHOW_MOOD: full tap enters mood selection.
  *
  *
  * @param s
@@ -100,7 +122,7 @@ void show_mood_button_handle(LampState &s);
 /**************************************************************************************************/
 /**
  * @name
- * @brief Handle the button in SELECT_MOOD: tap to cycle moods, hold to confirm.
+ * @brief Handle the button in SELECT_MOOD: half tap cycles moods, full tap confirms.
  *
  *
  * @param s

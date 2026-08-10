@@ -29,6 +29,11 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+// Perceptual gamma for brightness ramps (BREATH). WS2812 PWM is linear but the eye is not,
+// so a linear ramp looks top-heavy; raising the factor to ~2.2 evens it out. k=0 and k=1 are
+// unchanged (0^g=0, 1^g=1), so BLINK stays crisp.
+#define LED_GAMMA 2.2f
+
 
 
 /*------------------------------------------------------------------------------------------------*/
@@ -47,7 +52,7 @@ static uint8_t lerp8(uint8_t a, uint8_t b, float t);
 static uint8_t scale8(uint8_t c, float k) {
     if (k < 0) k = 0;
     if (k > 1) k = 1;
-    return (uint8_t)(c * k);
+    return (uint8_t)(c * powf(k, LED_GAMMA));
 }
 
 static uint8_t lerp8(uint8_t a, uint8_t b, float t) {
@@ -61,6 +66,15 @@ void mood_frame(const MoodDefinition &mood, uint32_t time_ms, uint8_t &red, uint
         red = 0;
         green = 0;
         blue = 0;
+        return;
+    }
+
+    // period == 0 means "not animated": render the base colour solid for any pattern
+    // (otherwise BREATH/BLINK compute a zero phase and fall to fully off).
+    if (mood.period == 0) {
+        red = C[0][0];
+        green = C[0][1];
+        blue = C[0][2];
         return;
     }
 
