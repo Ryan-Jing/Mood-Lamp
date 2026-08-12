@@ -32,8 +32,8 @@
 /* GLOBAL VARIABLES                                                                               */
 /*------------------------------------------------------------------------------------------------*/
 
-const int button_position_one = D7;  // Half-press stage (button pin 2), active low
-const int button_position_two = D8;  // Full-press stage (button pin 3), active low
+const int button_position_one = D2;  // Half-press stage (button pin 2), active low
+const int button_position_two = D1;  // Full-press stage (button pin 3), active low
 
 /*------------------------------------------------------------------------------------------------*/
 /* FUNCTION PROTOTYPES                                                                            */
