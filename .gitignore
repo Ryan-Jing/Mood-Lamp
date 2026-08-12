@@ -15,7 +15,8 @@ Server/.venv/
 *.elf
 *.map
 **/.DS_Store
-.DS_Store
+.DS_Store\
+.history
 
 __pycache__/
 *.py[cod]
