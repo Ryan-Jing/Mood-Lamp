@@ -176,19 +176,36 @@ casual presses in SHOW_MOOD do nothing.
 
 ## LED (WS2812B)
 
-One WS2812B pixel on GPIO2, driven by Adafruit NeoPixel. Every lamp-task iteration calls
-`led_render(mood)`, which looks up the mood's `MoodDefinition` (up to 4 RGB colours, a
-pattern, and a period) and computes the current frame with `mood_frame()` in
-`led_effects.cpp` — pure logic with no hardware dependency, which is what the native unit
-tests cover.
+One WS2812B pixel on GPIO4 (XIAO `D2`), driven by Adafruit NeoPixel. Every lamp-task
+iteration calls `led_render(mood)`, which looks up the mood's `MoodDefinition` (up to
+`MAX_MOOD_COLOURS` = 8 RGB colours, a pattern, and a period) and computes the current frame
+with `mood_frame()` in `led_effects.cpp` — pure logic with no hardware dependency, which is
+what the native unit tests cover. `led_render` only re-latches the pixel when the computed
+colour changes.
 
-Patterns: `SOLID`, `BLINK` (on for the first half of the period, off for the second),
-`BREATH` (raised-cosine brightness ramp), `ALTERNATE` (hard switch between colours each
-period), `FADE` (smooth cross-fade between colours).
+Patterns: `SOLID`, `BLINK` (on for the first half of the period), `BREATH` (raised-cosine,
+gamma-corrected brightness ramp), `ALTERNATE` (hard switch between colours each period),
+`FADE` (smooth cross-fade between colours), `BREATH_ALTERNATE` (one breath per colour,
+advancing to the next each cycle). A `period` of 0 renders the base colour solid.
 
-The mood table lives in `moods.h` (generated from `Utils/moods.yaml`): 3 status patterns
-(`IDLE`, `BLE`, `NO_WIFI`) + 10 user moods (Sad, Crying, Working, Happy, Leepy, Love,
-Cheeck Cheeck, Heepy, Angry, Hungry).
+The mood table is generated from `Utils/moods.yaml` into `moods.h`. The three **status**
+moods — `IDLE` (warm-white breath), `BLE` (cyan blink), `NO_WIFI` (orange blink) — are never
+user-selectable; scrolling to pick a mood skips them (`FIRST_SELECTABLE_MOOD`). The eleven
+user moods:
+
+| # | Mood | Colour(s) | Pattern | Period |
+|---|---|---|---|---|
+| 1 | Excited | bright yellow | breath | 400 ms |
+| 2 | Happy | rainbow (7 colours) | fade | 200 ms |
+| 3 | Sad | dark blue | breath | 1000 ms |
+| 4 | Upset | dark red ↔ dark orange | fade | 1000 ms |
+| 5 | Anxious | dark purple → purple → violet → red | breath alternate | 200 ms |
+| 6 | Deep Breaths | dark green | breath | 5000 ms |
+| 7 | Love | dark pink → pink → bright pink → light purple | fade | 1000 ms |
+| 8 | Heepy | bright pink | blink | 500 ms |
+| 9 | Hungry | dark brownish yellow | blink | 1000 ms |
+| 10 | Tired | purple ↔ blue-purple | fade | 1000 ms |
+| 11 | Working | warm orange | solid | — |
 
 ---
 

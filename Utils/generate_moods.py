@@ -10,6 +10,7 @@ Usage:
     python3 Utils/generate_moods.py
 """
 import os
+import re
 import sys
 
 try:
@@ -22,7 +23,7 @@ ROOT = os.path.dirname(HERE)                                # repo root
 YAML_PATH = os.path.join(HERE, "moods.yaml")
 OUT_PATH = os.path.join(ROOT, "Firmware", "include", "moods.h")
 
-MAX_MOOD_COLOURS = 4
+MAX_MOOD_COLOURS = 8
 
 # yaml keyword -> C enumerator. Enum is emitted in PATTERN_ORDER below.
 PATTERN_MAP = {
@@ -31,9 +32,10 @@ PATTERN_MAP = {
     "breath": "PATTERN_BREATH",
     "alternate": "PATTERN_ALTERNATE",
     "fade": "PATTERN_FADE",
+    "breath_alternate": "PATTERN_BREATH_ALTERNATE",
 }
 PATTERN_ORDER = ["PATTERN_SOLID", "PATTERN_BLINK", "PATTERN_BREATH",
-                 "PATTERN_ALTERNATE", "PATTERN_FADE"]
+                 "PATTERN_ALTERNATE", "PATTERN_FADE", "PATTERN_BREATH_ALTERNATE"]
 
 WIDTH = 100
 
@@ -88,6 +90,11 @@ def main():
         moods = yaml.safe_load(f)["moods"]
     validate(moods)
 
+    # First user-selectable mood: the status moods (IDLE/BLE/NO_WIFI) come before the first
+    # "MOOD_<n>" entry and are never offered when the user scrolls to pick a mood.
+    first_selectable = next((m["id"] for m in moods if re.fullmatch(r"MOOD_\d+", m["id"])),
+                            moods[0]["id"])
+
     L = banner()
     L += ["", "#ifndef MOODS_H", "#define MOODS_H", ""]
 
@@ -110,6 +117,9 @@ def main():
         comma = "," if i < len(moods) - 1 else ""
         L.append(f"    {m['id']}{comma}   // {m['name']}")
     L += ["};", ""]
+
+    # Mood scrolling starts here and wraps back here, skipping the status moods before it.
+    L += [f"#define FIRST_SELECTABLE_MOOD {first_selectable}", ""]
 
     L += ["enum MoodPattern {"]
     for i, p in enumerate(PATTERN_ORDER):

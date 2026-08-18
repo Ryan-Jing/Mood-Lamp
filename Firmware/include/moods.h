@@ -23,8 +23,8 @@
 // GLOBAL VARIABLES                                                                               */
 /*------------------------------------------------------------------------------------------------*/
 
-#define MOOD_COUNT          13
-#define MAX_MOOD_COLOURS    4
+#define MOOD_COUNT          14
+#define MAX_MOOD_COLOURS    8
 
 /*------------------------------------------------------------------------------------------------*/
 // CLASS DECLARATIONS                                                                             */
@@ -34,24 +34,28 @@ enum Moods {
     IDLE,   // Default
     BLE,   // BLE Provisioning
     NO_WIFI,   // No Wi-Fi
-    MOOD_1,   // Sad
-    MOOD_2,   // Crying
-    MOOD_3,   // Working
-    MOOD_4,   // Happy
-    MOOD_5,   // Leepy
-    MOOD_6,   // Love
-    MOOD_7,   // Cheeck Cheeck
+    MOOD_1,   // Excited
+    MOOD_2,   // Happy
+    MOOD_3,   // Sad
+    MOOD_4,   // Upset
+    MOOD_5,   // Anxious
+    MOOD_6,   // Deep Breaths
+    MOOD_7,   // Love
     MOOD_8,   // Heepy
-    MOOD_9,   // Angry
-    MOOD_10   // Hungry
+    MOOD_9,   // Hungry
+    MOOD_10,   // Tired
+    MOOD_11   // Working
 };
+
+#define FIRST_SELECTABLE_MOOD MOOD_1
 
 enum MoodPattern {
     PATTERN_SOLID,
     PATTERN_BLINK,
     PATTERN_BREATH,
     PATTERN_ALTERNATE,
-    PATTERN_FADE
+    PATTERN_FADE,
+    PATTERN_BREATH_ALTERNATE
 };
 
 typedef struct {
@@ -62,19 +66,20 @@ typedef struct {
 } MoodDefinition;
 
 static const MoodDefinition MOOD_TABLE[MOOD_COUNT] = {
-    { {{255, 200, 160}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, 1, PATTERN_BREATH, 6000 },   // IDLE Default
-    { {{0, 255, 255}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, 1, PATTERN_BLINK, 1000 },   // BLE BLE Provisioning
-    { {{255, 90, 25}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, 1, PATTERN_BLINK, 500 },   // NO_WIFI No Wi-Fi
-    { {{0, 0, 160}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, 1, PATTERN_BREATH, 5000 },   // MOOD_1 Sad
-    { {{0, 40, 180}, {0, 140, 200}, {0, 0, 0}, {0, 0, 0}}, 2, PATTERN_FADE, 2200 },   // MOOD_2 Crying
-    { {{255, 255, 255}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, 1, PATTERN_SOLID, 0 },   // MOOD_3 Working
-    { {{255, 205, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, 1, PATTERN_SOLID, 0 },   // MOOD_4 Happy
-    { {{50, 0, 110}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, 1, PATTERN_BREATH, 7000 },   // MOOD_5 Leepy
-    { {{255, 30, 80}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, 1, PATTERN_BREATH, 1300 },   // MOOD_6 Love
-    { {{255, 110, 140}, {255, 170, 190}, {0, 0, 0}, {0, 0, 0}}, 2, PATTERN_ALTERNATE, 600 },   // MOOD_7 Cheeck Cheeck
-    { {{0, 210, 120}, {120, 230, 0}, {0, 0, 0}, {0, 0, 0}}, 2, PATTERN_ALTERNATE, 500 },   // MOOD_8 Heepy
-    { {{255, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, 1, PATTERN_BLINK, 350 },   // MOOD_9 Angry
-    { {{255, 110, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, 1, PATTERN_BREATH, 2200 },   // MOOD_10 Hungry
+    { {{255, 200, 160}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, 1, PATTERN_BREATH, 6000 },   // IDLE Default
+    { {{0, 245, 255}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, 1, PATTERN_BLINK, 1000 },   // BLE BLE Provisioning
+    { {{255, 90, 25}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, 1, PATTERN_BLINK, 500 },   // NO_WIFI No Wi-Fi
+    { {{255, 220, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, 1, PATTERN_BREATH, 1000 },   // MOOD_1 Excited
+    { {{255, 0, 0}, {255, 110, 0}, {255, 220, 0}, {0, 200, 0}, {0, 90, 255}, {75, 0, 190}, {200, 0, 255}, {0, 0, 0}}, 7, PATTERN_FADE, 1000 },   // MOOD_2 Happy
+    { {{0, 0, 100}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, 1, PATTERN_BREATH, 3000 },   // MOOD_3 Sad
+    { {{130, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, 1, PATTERN_BREATH, 1000 },   // MOOD_4 Upset
+    { {{40, 0, 60}, {100, 0, 150}, {180, 0, 255}, {200, 0, 50}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, 4, PATTERN_BREATH_ALTERNATE, 800 },   // MOOD_5 Anxious
+    { {{20, 80, 10}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, 1, PATTERN_BREATH, 8000 },   // MOOD_6 Deep Breaths
+    { {{150, 0, 60}, {255, 60, 120}, {255, 0, 140}, {200, 120, 255}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, 4, PATTERN_FADE, 1000 },   // MOOD_7 Love
+    { {{255, 0, 150}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, 1, PATTERN_BLINK, 800 },   // MOOD_8 Heepy
+    { {{110, 80, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, 1, PATTERN_BREATH, 1000 },   // MOOD_9 Hungry
+    { {{130, 0, 0}, {150, 55, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, 2, PATTERN_FADE, 10000 },   // MOOD_10 Tired
+    { {{240, 110, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, 1, PATTERN_SOLID, 0 },   // MOOD_11 Working
 };
 
 /*------------------------------------------------------------------------------------------------*/

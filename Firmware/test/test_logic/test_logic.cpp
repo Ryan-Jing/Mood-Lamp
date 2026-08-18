@@ -105,6 +105,18 @@ void test_breath_min_at_zero_max_at_half(void) {
     TEST_ASSERT_EQUAL_UINT8(100, r);
 }
 
+// Breath-alternate breathes each colour in turn, advancing one colour per period.
+void test_breath_alternate_advances_colour_each_period(void) {
+    MoodDefinition m = { { {100, 0, 0}, {0, 100, 0} }, 2, PATTERN_BREATH_ALTERNATE, 1000 };
+    uint8_t r, g, b;
+    mood_frame(m, 500,  r, g, b);   // cycle 0, colour 0, half period -> full red
+    TEST_ASSERT_EQUAL_UINT8(100, r); TEST_ASSERT_EQUAL_UINT8(0, g);
+    mood_frame(m, 1500, r, g, b);   // cycle 1, colour 1, half period -> full green
+    TEST_ASSERT_EQUAL_UINT8(0, r);   TEST_ASSERT_EQUAL_UINT8(100, g);
+    mood_frame(m, 2000, r, g, b);   // cycle 2 wraps to colour 0, phase 0 -> off
+    TEST_ASSERT_EQUAL_UINT8(0, r);   TEST_ASSERT_EQUAL_UINT8(0, g);
+}
+
 /*------------------------------------------------------------------------------------------------*/
 /* RUNNER                                                                                         */
 /*------------------------------------------------------------------------------------------------*/
@@ -119,5 +131,6 @@ int main(int argc, char **argv) {
     RUN_TEST(test_alternate_cycles_and_wraps);
     RUN_TEST(test_zero_colours_is_off);
     RUN_TEST(test_breath_min_at_zero_max_at_half);
+    RUN_TEST(test_breath_alternate_advances_colour_each_period);
     return UNITY_END();
 }

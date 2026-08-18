@@ -102,6 +102,13 @@ void mood_frame(const MoodDefinition &mood, uint32_t time_ms, uint8_t &red, uint
             red = scale8(C[0][0], k); green = scale8(C[0][1], k); blue = scale8(C[0][2], k);
             break;
         }
+        case PATTERN_BREATH_ALTERNATE: {   // one breath (dim->bright->dim) per colour, then the next
+            uint8_t i = (uint8_t)((time_ms / mood.period) % mood.num_colours);
+            float phase = (float)(time_ms % mood.period) / mood.period;
+            float k = (1.0f - cosf(2.0f * (float)M_PI * phase)) * 0.5f;
+            red = scale8(C[i][0], k); green = scale8(C[i][1], k); blue = scale8(C[i][2], k);
+            break;
+        }
         case PATTERN_BLINK: {
             float k = (mood.period && (time_ms % mood.period) < mood.period / 2) ? 1.0f : 0.0f;
             red = scale8(C[0][0], k); green = scale8(C[0][1], k); blue = scale8(C[0][2], k);

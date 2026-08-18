@@ -207,7 +207,11 @@ void show_mood_button_handle(LampState &s) {
 
 void select_mood_button_handle(LampState &s) {
     if (s.button_event == BUTTON_EVENT_HALF_TAP) {
-        s.self_mood = static_cast<Moods>((s.self_mood + 1) % MOOD_COUNT);
+        int next = static_cast<int>(s.self_mood) + 1;
+        if (next >= MOOD_COUNT) {
+            next = FIRST_SELECTABLE_MOOD;   // wrap back to the first user mood, skipping the
+        }                                    // IDLE / BLE / NO_WIFI status moods
+        s.self_mood = static_cast<Moods>(next);
 
         #ifdef PRINT_DEBUG
             Serial.print("Self mood currently viewing: ");

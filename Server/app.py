@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 DB_PATH = Path(os.getenv("MOOD_DB", "mood.db"))
-MOOD_COUNT = int(os.getenv("MOOD_COUNT", "13"))
+MOOD_COUNT = int(os.getenv("MOOD_COUNT", "14"))
 RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
 CLIENT_RATE_LIMIT = int(os.getenv("CLIENT_RATE_LIMIT", "240"))
 AUTH_FAILURE_RATE_LIMIT = int(os.getenv("AUTH_FAILURE_RATE_LIMIT", "20"))
