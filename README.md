@@ -19,16 +19,16 @@ The user-selectable moods:
 
 | # | Mood | Colour(s) | Pattern | Period |
 |---|---|---|---|---|
-| 1 | Excited | bright yellow | breath | 400 ms |
-| 2 | Happy | rainbow (7 colours) | fade | 200 ms |
-| 3 | Sad | dark blue | breath | 1000 ms |
-| 4 | Upset | dark red ↔ dark orange | fade | 1000 ms |
+| 1 | Excited | bright yellow | breath | 1000 ms |
+| 2 | Happy | rainbow (7 colours) | fade | 1000 ms |
+| 3 | Sad | dark blue | breath | 2000 ms |
+| 4 | Upset | dark red | breath | 1000 ms |
 | 5 | Anxious | dark purple → purple → violet → red | breath alternate | 200 ms |
-| 6 | Deep Breaths | dark green | breath | 5000 ms |
+| 6 | Deep Breaths | teal green | breath | 10000 ms |
 | 7 | Love | dark pink → pink → bright pink → light purple | fade | 1000 ms |
 | 8 | Heepy | bright pink | blink | 500 ms |
-| 9 | Hungry | dark brownish yellow | blink | 1000 ms |
-| 10 | Tired | purple ↔ blue-purple | fade | 1000 ms |
+| 9 | Hungry | dark brownish yellow | breath | 1000 ms |
+| 10 | Tired | red → orange → yellow | fade | 1000 ms |
 | 11 | Working | warm orange | solid | — |
 
 Patterns: `solid`, `blink`, `breath`, `alternate` (hard switch between colours), `fade` (smooth
