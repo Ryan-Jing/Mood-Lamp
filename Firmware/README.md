@@ -4,7 +4,10 @@ Firmware for a two-device "mood lamp" pair. Each lamp is a Seeed XIAO ESP32-C3 w
 WS2812B RGB LED and one dual-stage pushbutton. A lamp's default display is the **peer's**
 mood: the user sets their own mood locally with the button, the firmware pushes it to a
 shared server over HTTPS, and the peer lamp polls the server and renders it as a
-colour/pattern. Wi-Fi credentials are provisioned over BLE from a desktop app.
+colour/pattern. Wi-Fi credentials are provisioned over BLE with `Utils/provision.py`.
+
+For end-user setup (power, provisioning, button use), see the
+[root README](../README.md#setup-guide); this document covers the firmware itself.
 
 ---
 
@@ -13,8 +16,8 @@ colour/pattern. Wi-Fi credentials are provisioned over BLE from a desktop app.
 | Component | Part | Connection |
 |---|---|---|
 | MCU | Seeed XIAO ESP32-C3 (single-core RISC-V, Wi-Fi + BLE) | USB-C for power/flash/serial |
-| RGB LED | SparkFun WS2812B Breakout (part 13282) | DIN → GPIO4 (XIAO `D2`), DO unconnected |
-| Button | E-Switch **PB300DTQ** dual-action pushbutton | pin 1 → GND, pin 2 → `D7`, pin 3 → `D8` |
+| RGB LED | SparkFun WS2812B Breakout (part 13282) | DIN → `D0` (GPIO2), DO unconnected |
+| Button | E-Switch **PB300DTQ** dual-action pushbutton | pin 1 → GND, pin 2 → `D2` (GPIO4), pin 3 → `D1` (GPIO3) |
 
 ### Wiring notes
 
@@ -24,11 +27,11 @@ colour/pattern. Wi-Fi credentials are provisioned over BLE from a desktop app.
   is in spec, slightly dimmer.
 - **Button**: both stage pins use internal pull-ups (`INPUT_PULLUP`), active low. No
   external resistors needed.
-- **`D8` is GPIO8, an ESP32-C3 strapping pin.** Normal boot is unaffected, but if the
-  button is held fully pressed while entering download mode (BOOT held during reset),
-  GPIO8 reads LOW and flashing mode will not engage. Don't press the button while flashing.
-- **`D7` is GPIO20 (UART0 RX).** Fine here because `Serial` uses USB-CDC, but the hardware
-  UART can't be used for input while the button owns this pin.
+- **`D0` is GPIO2, an ESP32-C3 strapping pin** — it must be high or floating at reset. The
+  WS2812B's DIN is a high-impedance input and the pin is only driven after boot, so normal
+  boot and flashing are unaffected.
+- Pin assignments live in `src/hal/led.cpp` (`LED_DIN_PIN`) and `src/hal/button.cpp`
+  (`button_position_one` / `button_position_two`).
 
 ---
 
@@ -114,7 +117,7 @@ interface in `state.cpp`:
 The E-Switch **PB300DTQ** is a momentary double-action pushbutton: the first circuit
 closes at mid travel and the second at full travel (2.0 mm total; ~600 g to the first
 detent, ~1150 g to the second). Pin 1 is common (GND); pin 2 grounds at **half press**
-(→ `D7`) and pin 3 grounds additionally at **full press** (→ `D8`). At full press both
+(→ `D2`) and pin 3 grounds additionally at **full press** (→ `D1`). At full press both
 signal pins are shorted to GND.
 
 ### Debounce and states
@@ -122,7 +125,7 @@ signal pins are shorted to GND.
 `get_button_state()` debounces each stage pin independently (50 ms) and folds them into
 one `ButtonState`:
 
-| `D7` (half stage) | `D8` (full stage) | State |
+| `D2` (half stage) | `D1` (full stage) | State |
 |---|---|---|
 | HIGH | HIGH | `BUTTON_RELEASED` |
 | LOW | HIGH | `BUTTON_HALF_PRESSED` |
@@ -176,7 +179,7 @@ casual presses in SHOW_MOOD do nothing.
 
 ## LED (WS2812B)
 
-One WS2812B pixel on GPIO4 (XIAO `D2`), driven by Adafruit NeoPixel. Every lamp-task
+One WS2812B pixel on `D0` (GPIO2), driven by Adafruit NeoPixel. Every lamp-task
 iteration calls `led_render(mood)`, which looks up the mood's `MoodDefinition` (up to
 `MAX_MOOD_COLOURS` = 8 RGB colours, a pattern, and a period) and computes the current frame
 with `mood_frame()` in `led_effects.cpp` — pure logic with no hardware dependency, which is
@@ -188,24 +191,27 @@ gamma-corrected brightness ramp), `ALTERNATE` (hard switch between colours each 
 `FADE` (smooth cross-fade between colours), `BREATH_ALTERNATE` (one breath per colour,
 advancing to the next each cycle). A `period` of 0 renders the base colour solid.
 
-The mood table is generated from `Utils/moods.yaml` into `moods.h`. The three **status**
-moods — `IDLE` (warm-white breath), `BLE` (cyan blink), `NO_WIFI` (orange blink) — are never
-user-selectable; scrolling to pick a mood skips them (`FIRST_SELECTABLE_MOOD`). The eleven
-user moods:
+The mood table is generated from `Utils/moods.yaml` into `moods.h`, and the enum index is
+the `mood_id` exchanged with the server (`MOOD_COUNT` = 14). The first three entries are
+**status** moods, never user-selectable; scrolling to pick a mood starts at
+`FIRST_SELECTABLE_MOOD` (`MOOD_1`) and wraps back to it:
 
-| # | Mood | Colour(s) | Pattern | Period |
-|---|---|---|---|---|
-| 1 | Excited | bright yellow | breath | 400 ms |
-| 2 | Happy | rainbow (7 colours) | fade | 200 ms |
-| 3 | Sad | dark blue | breath | 1000 ms |
-| 4 | Upset | dark red ↔ dark orange | fade | 1000 ms |
-| 5 | Anxious | dark purple → purple → violet → red | breath alternate | 200 ms |
-| 6 | Deep Breaths | dark green | breath | 5000 ms |
-| 7 | Love | dark pink → pink → bright pink → light purple | fade | 1000 ms |
-| 8 | Heepy | bright pink | blink | 500 ms |
-| 9 | Hungry | dark brownish yellow | blink | 1000 ms |
-| 10 | Tired | purple ↔ blue-purple | fade | 1000 ms |
-| 11 | Working | warm orange | solid | — |
+| ID | Enum | Mood | Colour(s) | Pattern | Period |
+|---|---|---|---|---|---|
+| 0 | `IDLE` | Default | soft warm white | breath | 6000 ms |
+| 1 | `BLE` | BLE Provisioning | cyan | blink | 1000 ms |
+| 2 | `NO_WIFI` | No Wi-Fi | reddish orange | blink | 500 ms |
+| 3 | `MOOD_1` | Excited | bright yellow | breath | 1000 ms |
+| 4 | `MOOD_2` | Happy | rainbow (7 colours) | fade | 1000 ms |
+| 5 | `MOOD_3` | Sad | dark blue | breath | 3000 ms |
+| 6 | `MOOD_4` | Upset | dark red | breath | 1000 ms |
+| 7 | `MOOD_5` | Anxious | dark purple → purple → violet → red | breath alternate | 800 ms |
+| 8 | `MOOD_6` | Deep Breaths | dark green | breath | 8000 ms |
+| 9 | `MOOD_7` | Love | dark pink → pink → bright pink → light purple | fade | 1000 ms |
+| 10 | `MOOD_8` | Heepy | bright pink | blink | 800 ms |
+| 11 | `MOOD_9` | Hungry | dark brownish yellow | breath | 1000 ms |
+| 12 | `MOOD_10` | Tired | dark red ↔ dark orange | fade | 10000 ms |
+| 13 | `MOOD_11` | Working | warm orange | solid | — |
 
 ---
 
@@ -213,24 +219,19 @@ user moods:
 
 ### Comms state machine (`CommsStatus`, in `vCommsTask`)
 
-```
-                 no saved creds
-  boot ──────────────────────────────► BLE_PROVISIONING ◄──── full hold 10 s (clear Wi-Fi)
-   │                                    │  ▲     │ 2 min timeout / full tap
-   │ saved creds                 client │  │drop └──────────────┐
-   ▼                            connects▼  │                    ▼
-  NET_CONNECTING ◄── creds applied ── BLE_CONNECTED      NET_CONNECTING or
-   │       ▲                                             NET_DISCONNECTED (no creds)
-   │ ok    │ Wi-Fi lost / poll failures
-   ▼       │
-  NET_CONNECTED ── 12 failed connect attempts ──► NET_DISCONNECTED
-```
+At boot the task starts in `BLE_PROVISIONING` if NVS holds no credentials, otherwise in
+`NET_CONNECTING`.
 
-- `NET_CONNECTING`: joins Wi-Fi (20 s timeout per attempt), then waits for SNTP time sync
-  (needed for TLS certificate validation). Retries every 5 s; after 12 failures gives up
-  to `NET_DISCONNECTED`.
-- `NET_CONNECTED`: uploads any locally-set mood, polls the peer's mood, and falls back to
-  `NET_CONNECTING` after 5 consecutive API failures or a Wi-Fi drop.
+| State | What it does | Leaves to |
+|---|---|---|
+| `BLE_PROVISIONING` | Advertises as `MoodLamp` and waits for a client | `BLE_CONNECTED` on connect; after the 2 min timeout or a full tap, back to `NET_CONNECTING` (saved creds) or `NET_DISCONNECTED` (none) |
+| `BLE_CONNECTED` | Receives SSID/password, saves them to NVS on Apply | `NET_CONNECTING` once credentials are applied; `BLE_PROVISIONING` if the client drops |
+| `NET_CONNECTING` | Joins Wi-Fi (20 s timeout per attempt), then waits for SNTP time sync (needed for TLS certificate validation); retries every 5 s | `NET_CONNECTED` on success; `NET_DISCONNECTED` after 12 failed attempts |
+| `NET_CONNECTED` | Uploads any locally-set mood and polls the peer's mood | `NET_CONNECTING` after 5 consecutive API failures or a Wi-Fi drop |
+| `NET_DISCONNECTED` | Idle; the lamp shows the `IDLE` pattern | Only by user command (button) |
+
+A 5 s full hold starts or stops BLE provisioning from any state; a 10 s full hold clears
+the stored credentials and returns to `BLE_PROVISIONING`.
 
 ### BLE provisioning
 
@@ -244,7 +245,7 @@ NimBLE GATT server, device name `MoodLamp`, active for at most 2 minutes per ses
 | Apply | `...0003` | write | Any write commits the credentials |
 | Status | `...0004` | read/notify | `"provisioning"` → `"connecting"` |
 
-Flow: the desktop app writes SSID and password, then writes Apply. The comms task saves
+Flow: `Utils/provision.py` writes SSID and password, then writes Apply. The comms task saves
 the credentials to NVS (`Preferences`, namespace `wifi`), notifies `"connecting"` on
 Status, tears down BLE, and moves to `NET_CONNECTING`. Credentials persist across reboots;
 a 10 s full-press hold wipes them and returns to provisioning.

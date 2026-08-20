@@ -8,7 +8,7 @@ Setup:
 
 Usage:
     1. Put the lamp in provisioning mode (LED blinking cyan).
-    2. Run:  python3 Utils/provisioning/provision.py
+    2. Run:  python3 Utils/provision.py
     3. Enter the Wi-Fi SSID and password when prompted.
 
 The UUIDs and device name below must match Firmware/src/net/ble.cpp.
