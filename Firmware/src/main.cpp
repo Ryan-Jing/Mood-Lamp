@@ -117,7 +117,6 @@ static void stop_ble_and_resume_network(NetState &net_state) {
         ble_provisioning_stop();
     }
 
-    net_state.wifi_retry_count = 0;
     net_state.poll_retry_count = 0;
 
     if (has_saved_wifi_credentials(net_state)) {
@@ -199,7 +198,7 @@ void vLampTask(void *pvParameters) {
                 if (comms_status == NET_CONNECTED) {
                     lamp_state.peer_mood = shared_get_peer_mood();
                 }
-                else if (comms_status == NET_DISCONNECTED) {
+                else if (comms_status == NET_DISCONNECTED || comms_status == NET_CONNECTING) {
                     lamp_state.peer_mood = IDLE;
                 }
 
@@ -260,7 +259,6 @@ void vCommsTask(void *pvParameters) {
                     clear_wifi_credentials();
                     wifi_disconnect();
                     ble_provisioning_start();
-                    net_state.wifi_retry_count = 0;
                     net_state.poll_retry_count = 0;
                     set_shared_comms_status(net_state, BLE_PROVISIONING);
                     break;
@@ -308,15 +306,7 @@ void vCommsTask(void *pvParameters) {
                 if (wifi_connect(net_state.wifi_credentials, WIFI_CONNECT_TIMEOUT_MS)) {
                     if (!api_wait_for_time(SNTP_TIMEOUT_MS)) {
                         wifi_disconnect();
-                        net_state.wifi_retry_count++;
-
-                        if (net_state.wifi_retry_count >= WIFI_MAX_RETRIES_BEFORE_BLE) {
-                            set_shared_comms_status(net_state, NET_DISCONNECTED);
-                        }
-
-                        else {
-                            vTaskDelay(pdMS_TO_TICKS(WIFI_RETRY_DELAY_MS));
-                        }
+                        vTaskDelay(pdMS_TO_TICKS(WIFI_RETRY_DELAY_MS));
 
                         break;
                     }
@@ -324,7 +314,6 @@ void vCommsTask(void *pvParameters) {
                     set_shared_comms_status(net_state, NET_CONNECTED);
                     net_state.last_peer_poll_ms = 0;
                     net_state.poll_retry_count = 0;
-                    net_state.wifi_retry_count = 0;
 
                     #ifdef PRINT_DEBUG
                         Serial.println("Wi-Fi connected");
@@ -333,15 +322,7 @@ void vCommsTask(void *pvParameters) {
 
                 else {
                     wifi_disconnect();
-                    net_state.wifi_retry_count++;
-
-                    if (net_state.wifi_retry_count >= WIFI_MAX_RETRIES_BEFORE_BLE) {
-                        set_shared_comms_status(net_state, NET_DISCONNECTED);
-                    }
-
-                    else {
-                        vTaskDelay(pdMS_TO_TICKS(WIFI_RETRY_DELAY_MS));
-                    }
+                    vTaskDelay(pdMS_TO_TICKS(WIFI_RETRY_DELAY_MS));
                 }
                 break;
 
@@ -444,7 +425,6 @@ void net_application_init(NetState &net_state) {
     net_state.peer_version = 0;
     net_state.last_peer_poll_ms = 0;
     net_state.ble_provisioning_started_ms = 0;
-    net_state.wifi_retry_count = 0;
     net_state.poll_retry_count = 0;
     net_state.has_mood_to_post = false;
 

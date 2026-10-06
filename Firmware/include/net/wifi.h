@@ -27,7 +27,6 @@
 
 #define WIFI_CONNECT_TIMEOUT_MS         20000
 #define WIFI_RETRY_DELAY_MS             5000
-#define WIFI_MAX_RETRIES_BEFORE_BLE     12
 
 /*------------------------------------------------------------------------------------------------*/
 // CLASS DECLARATIONS                                                                             */

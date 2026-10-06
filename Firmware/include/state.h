@@ -77,7 +77,6 @@ typedef struct NetState {
     uint32_t peer_version;
     uint32_t last_peer_poll_ms;
     uint32_t ble_provisioning_started_ms;
-    uint8_t wifi_retry_count;
     uint8_t poll_retry_count;
     bool has_mood_to_post;
 } NetState;
